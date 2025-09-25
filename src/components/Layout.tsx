@@ -14,6 +14,7 @@ import {
   GraduationCap,
   Handshake,
   Upload,
+  BarChart3,
 } from 'lucide-react';
 import CrownIcon from './icons/CrownIcon';
 import { mockUser } from '../data/mockData';
@@ -21,6 +22,7 @@ import { mockUser } from '../data/mockData';
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
   { to: '/contratos', label: 'Contratos', icon: PieChart },
+  { to: '/balanco-energetico', label: 'Balanço Energético', icon: BarChart3 },
   { to: '/leads', label: 'Leads', icon: FileText },
   { to: '/negociacoes', label: 'Negociações', icon: Handshake },
   { to: '/agenda', label: 'Agenda', icon: Calendar },
