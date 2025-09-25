@@ -38,4 +38,5 @@ export type Cliente = {
   consumo: number; // kWh consumidos
   geracao: number; // kWh gerados
   balanco: number; // saldo energético (geracao - consumo)
+  saldo?: string; // representação formatada do saldo energético
 };

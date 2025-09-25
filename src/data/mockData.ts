@@ -72,6 +72,7 @@ export const mockClientes: Cliente[] = [
     consumo: 1000,
     geracao: 1200,
     balanco: 200,
+    saldo: 'Saldo +200 kWh',
   },
   {
     id: 2,
@@ -81,5 +82,6 @@ export const mockClientes: Cliente[] = [
     consumo: 800,
     geracao: 600,
     balanco: -200,
+    saldo: 'Saldo -200 kWh',
   },
 ];

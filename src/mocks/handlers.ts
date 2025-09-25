@@ -22,6 +22,36 @@ const segmentos = ['Industrial', 'Comercial', 'Serviços', 'Agro', 'Logística']
 const contatos = ['João Silva', 'Maria Santos', 'Pedro Oliveira', 'Ana Souza', 'Carlos Lima'];
 const fontes: Contrato['fonte'][] = ['Convencional', 'Incentivada'];
 
+const mockEnergyClients = [
+  {
+    id: 1,
+    nome: 'Cliente Energia A',
+    bandeira: 'Verde',
+    imposto: '12%',
+    consumo: '1.000 kWh',
+    geracao: '1.200 kWh',
+    saldo: 'Saldo +200 kWh',
+  },
+  {
+    id: 2,
+    nome: 'Cliente Energia B',
+    bandeira: 'Amarela',
+    imposto: '15%',
+    consumo: '800 kWh',
+    geracao: '600 kWh',
+    saldo: 'Saldo -200 kWh',
+  },
+  {
+    id: 3,
+    nome: 'Cliente Energia C',
+    bandeira: 'Vermelha',
+    imposto: '10%',
+    consumo: '950 kWh',
+    geracao: '900 kWh',
+    saldo: 'Saldo -50 kWh',
+  },
+];
+
 const allContratos: Contrato[] = Array.from({ length: 24 }).map((_, i) => {
   const mes = months[i % months.length];
   const fonte = fontes[i % fontes.length];
@@ -65,6 +95,10 @@ function gerarSerie24Meses(seedStr: string, base: number, amplitude: number) {
 }
 
 export const handlers = [
+  http.get('https://n8n.ynovamarketplace.com/webhook-test/mockScde', () =>
+    HttpResponse.json(mockEnergyClients),
+  ),
+  http.get('/api/webhook-test/mockScde', () => HttpResponse.json(mockEnergyClients)),
   // Listagem de contratos com paginação
   http.get('/api/contratos', ({ request }) => {
     const url = new URL(request.url);
