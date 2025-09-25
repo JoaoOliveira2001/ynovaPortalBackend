@@ -5,6 +5,7 @@ type PillColor = 'green' | 'red' | 'gray' | 'orange' | 'blue';
 
 type Props = {
   to?: string;
+  state?: unknown;
   onClick?: () => void;
   title: string;
   badgeLabel?: string;
@@ -15,6 +16,7 @@ type Props = {
 
 export default function ListRow({
   to,
+  state,
   onClick,
   title,
   badgeLabel,
@@ -62,7 +64,7 @@ export default function ListRow({
   if (to) {
     return (
       <li className="p-0">
-        <Link to={to} className="block">
+        <Link to={to} state={state} className="block">
           {content}
         </Link>
       </li>

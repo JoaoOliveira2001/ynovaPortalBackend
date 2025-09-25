@@ -1,18 +1,31 @@
 import React, { useState } from 'react';
 import ModalEnergyDetails from '../components/ModalEnergyDetails';
-import { Link, useParams } from 'react-router-dom';
-import { mockClientes } from '../data/mockData';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { useClientes } from '../hooks/useClientes';
+import type { Cliente } from '../types';
 
 export default function SimulationClientPage() {
   const { clientId } = useParams();
-  const cliente = mockClientes.find((c) => c.id.toString() === clientId);
+  const location = useLocation();
+  const locationState = (location.state as { cliente?: Cliente } | undefined) ?? {};
+  const { cliente: clienteFromState } = locationState;
+  const { clientes, loading, error } = useClientes(clienteFromState ? [clienteFromState] : []);
+
+  const cliente = clienteFromState ?? clientes.find((c) => c.id.toString() === String(clientId));
 
   if (!cliente) {
+    if (loading) {
+      return <div>Carregando cliente...</div>;
+    }
+    if (error) {
+      return <div>Erro ao carregar cliente: {error.message}</div>;
+    }
     return <div>Cliente não encontrado</div>;
   }
 
   // Helpers e simulação de custos (placeholders visuais)
-  const parsePercent = (txt: string) => {
+  const parsePercent = (txt?: string) => {
+    if (!txt) return 0;
     const n = parseFloat(txt.replace('%', '').replace(',', '.'));
     return isNaN(n) ? 0 : n / 100;
   };
@@ -25,7 +38,7 @@ export default function SimulationClientPage() {
   const tarifaAtual = 0.62; // R$/kWh
   const tarifaCativo = 0.50; // R$/kWh (estimada)
 
-  const consumoLiquido = Math.max(cliente.consumo - cliente.geracao, 0);
+  const consumoLiquido = Math.max((cliente.consumo ?? 0) - (cliente.geracao ?? 0), 0);
 
   // Itens de linha (resumo + detalhes) para as duas tabelas
   type Item = { label: string; quantidade: number; tarifa: number };
@@ -107,6 +120,12 @@ export default function SimulationClientPage() {
           </button>
         </div>
       </div>
+
+      {error && !loading && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Não foi possível atualizar os dados do cliente automaticamente: {error.message}
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">

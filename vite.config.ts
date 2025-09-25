@@ -14,6 +14,14 @@ export default defineConfig({
       clientPort: 443,
       protocol: 'wss',
     },
+    proxy: {
+      '/api': {
+        target: 'https://n8n.ynovamarketplace.com',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
   },
   test: {
     environment: 'jsdom',
