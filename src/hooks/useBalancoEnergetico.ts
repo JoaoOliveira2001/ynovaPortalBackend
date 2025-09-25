@@ -24,7 +24,17 @@ export function useBalancoEnergetico() {
     queryFn: async () => {
       const res = await fetch('https://n8n.ynovamarketplace.com/webhook/mockScde');
       if (!res.ok) throw new Error('Erro ao carregar dados do balanço energético');
-      return res.json();
+      const payload = await res.json();
+
+      if (Array.isArray(payload)) {
+        return payload;
+      }
+
+      if (payload && typeof payload === 'object') {
+        return [payload as BalancoEnergetico];
+      }
+
+      return [];
     },
   });
 }
