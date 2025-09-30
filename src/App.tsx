@@ -18,6 +18,7 @@ import TrainingPage from './pages/TrainingPage';
 import SimulationClientsPage from './pages/SimulationClientsPage';
 import SimulationClientPage from './pages/SimulationClientPage';
 import OportunidadesPage from './pages/OportunidadesPage';
+import BalancoEnergeticoPage from './pages/BalancoEnergeticoPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ContratosPage from './pages/contratos';
 import DetalheContratoPage from './pages/contratos/DetalheContrato';
@@ -50,6 +51,7 @@ function AppRoutes() {
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="oportunidades" element={<OportunidadesPage />} />
             <Route path="inteligencia" element={<InteligenciaPage />} />
+            <Route path="balanco-energetico" element={<BalancoEnergeticoPage />} />
 
             {/* Gestão: Contratos */}
             <Route path="contratos" element={<ContratosPage />} />
