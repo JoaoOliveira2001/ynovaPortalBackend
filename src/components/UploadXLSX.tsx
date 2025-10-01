@@ -3,22 +3,10 @@ import { Loader2, Upload } from 'lucide-react';
 
 interface SelectedFile {
   name: string;
-  base64: string;
+  file: File;
 }
 
 type UploadStatus = 'idle' | 'loading' | 'success' | 'error';
-
-function arrayBufferToBase64(buffer: ArrayBuffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-
-  for (let i = 0; i < len; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-
-  return btoa(binary);
-}
 
 export default function UploadXLSX() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -26,23 +14,22 @@ export default function UploadXLSX() {
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [message, setMessage] = useState<string>('');
 
+  const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+
   const openFilePicker = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
     if (!file) {
       return;
     }
 
-    const buffer = await file.arrayBuffer();
-    const base64 = arrayBufferToBase64(buffer);
-
     setSelectedFile({
       name: file.name,
-      base64,
+      file,
     });
     setStatus('idle');
     setMessage('');
@@ -58,19 +45,18 @@ export default function UploadXLSX() {
       setStatus('loading');
       setMessage('Enviando fatura...');
 
-      const response = await fetch('http://localhost:4000/upload', {
+      const formData = new FormData();
+      formData.append('file', selectedFile.file, selectedFile.name);
+
+      const response = await fetch(`${apiBaseUrl}/upload`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: selectedFile.name,
-          file: selectedFile.base64,
-        }),
+        body: formData,
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        throw new Error('Falha ao enviar');
+        const errorText = await response.text();
+        throw new Error(errorText || 'Falha ao enviar');
       }
 
       setStatus('success');
@@ -82,7 +68,8 @@ export default function UploadXLSX() {
     } catch (error) {
       console.error(error);
       setStatus('error');
-      setMessage('❌ Erro ao enviar fatura');
+      const message = error instanceof Error ? error.message : 'Erro ao enviar fatura';
+      setMessage(`❌ ${message}`);
     }
   };
 
