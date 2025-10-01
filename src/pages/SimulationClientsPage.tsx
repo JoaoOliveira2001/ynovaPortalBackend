@@ -73,7 +73,7 @@ export default function SimulationClientsPage() {
             {filteredClientes.map((cliente) => (
               <ListRow
                 key={cliente.id}
-                to={`/leads/simulation/${cliente.id}`}
+                to={`/leads/${cliente.id}`}
                 title={cliente.nome}
                 badgeLabel={`Bandeira: ${cliente.bandeira}`}
                 detail={`Imposto: ${cliente.imposto} • Consumo: ${cliente.consumo} kWh • Geração: ${cliente.geracao} kWh`}

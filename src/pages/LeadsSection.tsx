@@ -2,16 +2,12 @@ import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
 export default function LeadsSection() {
-  const tabs = [
-    { to: '/leads', label: 'Leads', end: true },
-    { to: '/leads/proposals', label: 'Propostas' },
-    { to: '/leads/simulation', label: 'Balanço Energético' },
-  ];
+  const tabs = [{ to: '/leads', label: 'Balanço Energético', end: true }];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Leads</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Balanço Energético</h1>
         <div className="mt-4 overflow-x-auto">
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-[#2b3238]">
             {tabs.map((t) => (

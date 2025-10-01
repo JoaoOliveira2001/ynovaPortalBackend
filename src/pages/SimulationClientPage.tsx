@@ -19,7 +19,7 @@ export default function SimulationClientPage() {
     return (
       <div className="space-y-4">
         <Link
-          to="/leads/simulation"
+          to="/leads"
           className={backLinkClass}
         >
           ← Voltar
@@ -35,7 +35,7 @@ export default function SimulationClientPage() {
     return (
       <div className="space-y-4">
         <Link
-          to="/leads/simulation"
+          to="/leads"
           className={backLinkClass}
         >
           ← Voltar
@@ -129,7 +129,7 @@ export default function SimulationClientPage() {
       <div className="flex items-start justify-between">
         <div>
           <Link
-            to="/leads/simulation"
+            to="/leads"
             className={backLinkClass}
           >
             ← Voltar
