@@ -20,7 +20,7 @@ import { mockUser } from '../data/mockData';
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
   { to: '/contratos', label: 'Contratos', icon: PieChart },
-  { to: '/leads/simulation', label: 'Balanço Energético', icon: FileText },
+  { to: '/leads', label: 'Balanço Energético', icon: FileText },
   /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
   /* { to: '/agenda', label: 'Agenda', icon: Calendar }, */
   { to: '/profile', label: 'Perfil', icon: User },
