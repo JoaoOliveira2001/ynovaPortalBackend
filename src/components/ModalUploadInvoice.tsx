@@ -1,15 +1,82 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Lead } from '../types';
 
 interface ModalUploadInvoiceProps {
   isOpen: boolean;
   onClose: () => void;
+  onInvoiceRegistered: (lead: Omit<Lead, 'id'>) => void;
 }
 
-export default function ModalUploadInvoice({ isOpen, onClose }: ModalUploadInvoiceProps) {
-  const [isDragging, setIsDragging] = useState(false);
+const SEGMENTS: Lead['segmento'][] = ['Industrial', 'Comercial', 'Serviços', 'Tecnologia'];
 
-  const simulateUpload = () => {
+const toTitleCase = (value: string) =>
+  value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+
+const slugify = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'cliente-energia';
+
+const generateCnpjFromSeed = (seedSource: string) => {
+  let seed = Array.from(seedSource).reduce((acc, char) => acc + char.charCodeAt(0), 0) + 137;
+  const digits: number[] = [];
+
+  for (let i = 0; i < 14; i += 1) {
+    seed = (seed * 73 + 41) % 9973;
+    const digit = (seed + i * 7) % 10;
+    digits.push(digit === 0 && i === 0 ? 1 : digit);
+  }
+
+  return `${digits[0]}${digits[1]}.${digits[2]}${digits[3]}${digits[4]}.${digits[5]}${digits[6]}${digits[7]}/${digits[8]}${digits[9]}${digits[10]}${digits[11]}-${digits[12]}${digits[13]}`;
+};
+
+const createLeadFromInvoice = (file: File): Omit<Lead, 'id'> => {
+  const baseName = file.name.replace(/\.[^.]+$/, '');
+  const normalizedName = toTitleCase(baseName.replace(/[_-]+/g, ' ').trim() || 'Cliente Energia');
+  const seed = Array.from(file.name).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const segment = SEGMENTS[seed % SEGMENTS.length];
+  const domain = slugify(normalizedName);
+  const contactFirstName = normalizedName.split(' ')[0] || 'Equipe';
+  const phoneBase = (40000000 + (seed % 10000000)).toString().padStart(8, '0');
+  const formattedPhone = `(11) ${phoneBase.slice(0, 4)}-${phoneBase.slice(4)}`;
+
+  return {
+    nome: normalizedName,
+    cnpj: generateCnpjFromSeed(file.name),
+    segmento: segment,
+    statusFunil: 'amarelo',
+    statusMigracao: 'em_analise',
+    ultimaInteracao: new Date().toISOString().split('T')[0],
+    contato: `${contactFirstName} - Equipe Financeira`,
+    telefone: formattedPhone,
+    email: `financeiro@${domain}.com.br`,
+  };
+};
+
+export default function ModalUploadInvoice({ isOpen, onClose, onInvoiceRegistered }: ModalUploadInvoiceProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const selectedFileName = useMemo(() => selectedFile?.name ?? '', [selectedFile]);
+
+  const processFile = (file: File) => {
+    setSelectedFile(file);
+    setIsUploading(true);
+
+    const leadData = createLeadFromInvoice(file);
+
     setTimeout(() => {
+      onInvoiceRegistered(leadData);
+      setIsUploading(false);
+      setSelectedFile(null);
       onClose();
     }, 800);
   };
@@ -18,13 +85,13 @@ export default function ModalUploadInvoice({ isOpen, onClose }: ModalUploadInvoi
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      simulateUpload();
+      processFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      simulateUpload();
+      processFile(e.target.files[0]);
     }
   };
 
@@ -59,14 +126,30 @@ export default function ModalUploadInvoice({ isOpen, onClose }: ModalUploadInvoi
           />
           <label
             htmlFor="invoice-upload"
-            className="inline-block px-4 py-2 bg-yn-orange hover:bg-yn-orange/90 text-white rounded-lg cursor-pointer"
+            className={`inline-block px-4 py-2 rounded-lg cursor-pointer text-white ${
+              isUploading
+                ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
+                : 'bg-yn-orange hover:bg-yn-orange/90'
+            }`}
+            aria-disabled={isUploading}
           >
-            Selecionar arquivo
+            {isUploading ? 'Processando...' : 'Selecionar arquivo'}
           </label>
+          {selectedFileName && (
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-300" aria-live="polite">
+              {isUploading ? `Processando ${selectedFileName}` : selectedFileName}
+            </p>
+          )}
         </div>
         <button
-          onClick={onClose}
-          className="mt-4 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+          onClick={() => {
+            if (!isUploading) {
+              setSelectedFile(null);
+              onClose();
+            }
+          }}
+          className="mt-4 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white disabled:opacity-50"
+          disabled={isUploading}
         >
           Cancelar
         </button>
