@@ -519,9 +519,11 @@ async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
       console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET.`);
       const response = await fetch(endpoint, {
         method: 'GET',
-        headers: {
-          Accept: 'application/json',
-        },
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+          },
         mode: 'cors',
         credentials: 'omit',
         signal,
