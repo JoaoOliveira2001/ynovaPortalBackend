@@ -1,16 +1,50 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ContratosPage from '..';
+import { ContractsProvider } from '../ContractsContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+
+vi.mock('../../../hooks/useContracts', async () => {
+  const actual = await vi.importActual<typeof import('../../../hooks/useContracts')>(
+    '../../../hooks/useContracts'
+  );
+  const { mockContracts } = await vi.importActual<typeof import('../../../mocks/contracts')>(
+    '../../../mocks/contracts'
+  );
+
+  return {
+    ...actual,
+    useContracts: () => ({
+      data: mockContracts.slice(0, 10).map((contract) => ({
+        id: contract.id,
+        contractNumber: contract.codigo,
+        customerName: contract.cliente,
+        status: contract.status === 'Ativo' ? 'ATIVO' : 'PENDENTE',
+        amount: contract.precoMedio,
+        startDate: contract.inicioVigencia,
+        endDate: contract.fimVigencia,
+        supplier: contract.dadosContrato.find((field) => field.label === 'Fornecedor')?.value,
+        monthlyConsumptionMWh: 120,
+        tags: undefined,
+      })),
+      loading: false,
+      error: undefined,
+      refresh: vi.fn(),
+    }),
+    formatCurrencyBRL: actual.formatCurrencyBRL,
+  };
+});
 
 function renderWithProviders(ui: React.ReactElement) {
   const qc = new QueryClient();
   return render(
     <MemoryRouter>
-      <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+      <QueryClientProvider client={qc}>
+        <ContractsProvider>{ui}</ContractsProvider>
+      </QueryClientProvider>
     </MemoryRouter>
   );
 }
