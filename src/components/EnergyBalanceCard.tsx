@@ -18,10 +18,115 @@ type EnergyBalanceResponse = {
   };
 };
 
+type SuccessState = {
+  status: 'success';
+  data: EnergyBalanceResponse;
+  isFallback: boolean;
+  warning?: string;
+};
+
 type FetchState =
   | { status: 'idle' | 'loading' }
-  | { status: 'success'; data: EnergyBalanceResponse }
+  | SuccessState
   | { status: 'error'; error: string };
+
+const DEMO_ENERGY_BALANCE: EnergyBalanceResponse = {
+  cliente: 'Cliente Energia A',
+  bandeira: 'Verde',
+  consumoKWh: 1000,
+  geracaoKWh: 1400,
+  economiaMigracao: {
+    saldoEnergeticoKWh: 200,
+  },
+  impostos: {
+    aliquotaExtra: 12,
+  },
+};
+
+function parseNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    const parsed = Number(normalized);
+
+    if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function sanitizeResponse(raw: unknown): EnergyBalanceResponse | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const cliente = typeof record.cliente === 'string' ? record.cliente.trim() : '';
+
+  if (!cliente) {
+    return null;
+  }
+
+  const bandeira = typeof record.bandeira === 'string' ? record.bandeira.trim() : undefined;
+  const consumo =
+    parseNumber(record.consumoKWh) ?? parseNumber(record.consumo) ?? parseNumber(record.consumoKwH);
+  const geracao =
+    parseNumber(record.geracaoKWh) ?? parseNumber(record.geracao) ?? parseNumber(record.geracaoKwH);
+
+  const economiaMigracao =
+    record.economiaMigracao && typeof record.economiaMigracao === 'object'
+      ? (record.economiaMigracao as Record<string, unknown>)
+      : undefined;
+
+  const saldo =
+    parseNumber(economiaMigracao?.saldoEnergeticoKWh) ??
+    parseNumber(economiaMigracao?.saldoEnergetico) ??
+    parseNumber((record as Record<string, unknown>).saldoEnergeticoKWh) ??
+    parseNumber((record as Record<string, unknown>).saldoEnergetico) ??
+    parseNumber((record as Record<string, unknown>).saldo);
+
+  const impostos =
+    record.impostos && typeof record.impostos === 'object'
+      ? (record.impostos as Record<string, unknown>)
+      : undefined;
+
+  const aliquotaExtra = impostos?.aliquotaExtra ?? (record as Record<string, unknown>).aliquotaExtra;
+
+  const response: EnergyBalanceResponse = {
+    cliente,
+  };
+
+  if (bandeira) {
+    response.bandeira = bandeira;
+  }
+
+  if (typeof consumo === 'number') {
+    response.consumoKWh = consumo;
+  }
+
+  if (typeof geracao === 'number') {
+    response.geracaoKWh = geracao;
+  }
+
+  if (typeof saldo === 'number') {
+    response.economiaMigracao = {
+      saldoEnergeticoKWh: saldo,
+    };
+  }
+
+  if (aliquotaExtra !== undefined) {
+    response.impostos = {
+      aliquotaExtra,
+    };
+  }
+
+  return response;
+}
 
 function formatNumber(value: number | undefined | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -55,30 +160,71 @@ export default function EnergyBalanceCard() {
     async function load() {
       setState({ status: 'loading' });
 
-      try {
-        const response = await fetch(ENERGY_BALANCE_URL, {
-          method: 'POST',
-          body: '',
-          signal: abortController.signal,
-        });
+      const attemptErrors: string[] = [];
 
-        if (!response.ok) {
-          throw new Error(`Falha ao carregar dados (${response.status})`);
-        }
+      const attempts: Array<{
+        label: string;
+        init: RequestInit;
+      }> = [
+        {
+          label: 'POST',
+          init: {
+            method: 'POST',
+            body: '',
+            signal: abortController.signal,
+          },
+        },
+        {
+          label: 'GET',
+          init: {
+            method: 'GET',
+            signal: abortController.signal,
+          },
+        },
+      ];
 
-        const data: EnergyBalanceResponse = await response.json();
+      for (const attempt of attempts) {
+        try {
+          const response = await fetch(ENERGY_BALANCE_URL, attempt.init);
 
-        setState({ status: 'success', data });
-      } catch (error) {
-        if (abortController.signal.aborted) {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const raw = await response.json();
+          const sanitized = sanitizeResponse(raw);
+
+          if (!sanitized) {
+            attemptErrors.push(`${attempt.label}: resposta sem dados válidos`);
+            continue;
+          }
+
+          setState({
+            status: 'success',
+            data: sanitized,
+            isFallback: false,
+          });
           return;
+        } catch (error) {
+          if (abortController.signal.aborted) {
+            return;
+          }
+
+          const message = error instanceof Error ? error.message : 'Erro inesperado';
+          attemptErrors.push(`${attempt.label}: ${message}`);
         }
-
-        const message =
-          error instanceof Error ? error.message : 'Não foi possível carregar os dados.';
-
-        setState({ status: 'error', error: message });
       }
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      setState({
+        status: 'success',
+        data: DEMO_ENERGY_BALANCE,
+        isFallback: true,
+        warning: `Não foi possível conectar ao BFF mock. Exibindo dados de demonstração. (${attemptErrors.join(' | ')})`,
+      });
     }
 
     load();
@@ -166,6 +312,11 @@ export default function EnergyBalanceCard() {
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-[#2b3238] dark:bg-[#1a1f24]">
+      {state.status === 'success' && state.warning && (
+        <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
+          {state.warning}
+        </div>
+      )}
       {content}
     </section>
   );
