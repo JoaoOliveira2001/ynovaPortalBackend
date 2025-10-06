@@ -4,6 +4,7 @@ import EmptyState from '../components/EmptyState';
 import { useSimulationClientes } from '../hooks/useSimulationClientes';
 import UploadXLSX from '../components/UploadXLSX';
 import { Search } from 'lucide-react';
+import EnergyBalanceCard from '../components/EnergyBalanceCard';
 
 export default function SimulationClientsPage() {
   const { clientes, loading, error, isUsingFallback } = useSimulationClientes();
@@ -35,6 +36,8 @@ export default function SimulationClientsPage() {
           <UploadXLSX />
         </div>
       </div>
+
+      <EnergyBalanceCard />
 
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -73,7 +76,7 @@ export default function SimulationClientsPage() {
             {filteredClientes.map((cliente) => (
               <ListRow
                 key={cliente.id}
-                to={`/leads/${cliente.id}`}
+                to={`/leads/simulation/${cliente.id}`}
                 title={cliente.nome}
                 badgeLabel={`Bandeira: ${cliente.bandeira}`}
                 detail={`Imposto: ${cliente.imposto} • Consumo: ${cliente.consumo} kWh • Geração: ${cliente.geracao} kWh`}

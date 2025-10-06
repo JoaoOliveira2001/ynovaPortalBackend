@@ -58,8 +58,8 @@ function AppRoutes() {
             </Route>
 
             {/* Conteúdo legado do portal de consultores (pode ser ajustado por role no futuro) */}
-            <Route path="leads" element={<SimulationClientsPage />} />
-            <Route path="leads/:clientId" element={<SimulationClientPage />} />
+            <Route path="leads/simulation" element={<SimulationClientsPage />} />
+            <Route path="leads/simulation/:clientId" element={<SimulationClientPage />} />
             <Route path="agenda" element={<AgendaPage />} />
             <Route path="commissions" element={<CommissionsPage />} />
             <Route path="profile" element={<ProfilePage />} />
