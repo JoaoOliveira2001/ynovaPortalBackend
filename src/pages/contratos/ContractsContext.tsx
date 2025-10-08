@@ -1,8 +1,6 @@
 import React from 'react';
 import { ContractMock } from '../../mocks/contracts';
-import { mockContracts } from '../../mocks/contracts';
-
-const DEFAULT_API_URL = 'https://657285488d18.ngrok-free.app';
+import { fetchContracts as fetchContractsFromApi } from '../../services/contracts';
 
 const resumoKeys: Array<keyof ContractMock['resumoConformidades']> = [
   'Consumo',
@@ -621,72 +619,6 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
   });
 };
 
-const buildEndpointCandidates = (rawUrl: string): string[] => {
-  const normalized = normalizeString(rawUrl) || DEFAULT_API_URL;
-  const sanitized = normalized.replace(/\s/g, '');
-  if (!sanitized) return [DEFAULT_API_URL];
-  const withoutTrailingSlash = sanitized.replace(/\/$/, '');
-  const candidates = new Set<string>();
-  candidates.add(withoutTrailingSlash);
-  if (!/\/contracts(\b|\d|\/)/i.test(withoutTrailingSlash)) {
-    candidates.add(`${withoutTrailingSlash}/contracts`);
-  }
-  return Array.from(candidates);
-};
-
-async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
-  const rawUrl = normalizeString(import.meta.env.VITE_CONTRACTS_API_URL);
-  const endpoints = buildEndpointCandidates(rawUrl);
-  let lastError: unknown;
-
-  for (const endpoint of endpoints) {
-    try {
-      console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET.`);
-
-      const response = await fetch("https://657285488d18.ngrok-free.app/contracts", {
-        method: 'GET',
-        headers: { "ngrok-skip-browser-warning": "true" },
-
-
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar contratos erro aqui (${response.status})`);
-      }
-
-      const data = await response.json();
-      const contracts = normalizeContractsFromApi(data);
-      if (!contracts.length) {
-        console.warn('[ContractsContext] API retornou lista vazia de contratos.');
-      }
-      console.info(
-        `[ContractsContext] Contratos carregados com sucesso: ${contracts.length} itens recebidos.`
-      );
-      return contracts;
-    } catch (error) {
-      if (signal?.aborted) {
-        throw error;
-      }
-      lastError = error;
-      console.error(
-        `[ContractsContext] Erro ao buscar contratos em ${endpoint}.`,
-        error instanceof Error ? error : new Error(String(error))
-      );
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        console.error(
-          '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
-        );
-      }
-      console.info('[ContractsContext] Tentando próximo endpoint disponível...');
-    }
-  }
-
-  throw (lastError instanceof Error
-    ? lastError
-    : new Error('Erro desconhecido ao carregar contratos'));
-}
-
 export type ContractUpdater = (contract: ContractMock) => ContractMock;
 
 type ContractsContextValue = {
@@ -724,15 +656,18 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
     async (signal?: AbortSignal) => {
       setIsLoading(true);
       try {
-        const apiContracts = await fetchContracts(signal);
+        const payload = await fetchContractsFromApi(signal);
+        const apiContracts = normalizeContractsFromApi(payload);
+        if (!apiContracts.length) {
+          console.warn('[ContractsContext] API retornou lista vazia de contratos.');
+        }
         if (signal?.aborted) return;
         setContracts(apiContracts.map((contract) => cloneContract(contract)));
         setError(null);
       } catch (err) {
         if (signal?.aborted) return;
-        console.error('[ContractsProvider] Falha ao buscar contratos da API, utilizando mocks.', err);
+        console.error('[ContractsProvider] Falha ao buscar contratos da API.', err);
         setError(err instanceof Error ? err.message : 'Erro desconhecido ao carregar contratos');
-        setContracts(mockContracts.map((contract) => cloneContract(contract)));
       } finally {
         if (!signal?.aborted) {
           setIsLoading(false);
