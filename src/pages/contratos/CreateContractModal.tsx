@@ -22,7 +22,6 @@ type InvoiceFormState = {
 };
 
 type FormState = {
-  codigo: string;
   cliente: string;
   cnpj: string;
   segmento: string;
@@ -69,7 +68,6 @@ function buildInvoiceState(): InvoiceFormState {
 
 function buildInitialFormState(): FormState {
   return {
-    codigo: '',
     cliente: '',
     cnpj: '',
     segmento: '',
@@ -155,7 +153,7 @@ function buildAnalises(): AnaliseArea[] {
   ];
 }
 
-function ensureId(value: string) {
+function ensureId(value?: string) {
   return value && value.trim().length > 0 ? value.trim() : `CT-${Date.now()}`;
 }
 
@@ -227,7 +225,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
   const validate = () => {
     const nextErrors: Record<string, string> = {};
-    if (!formState.codigo.trim()) nextErrors.codigo = 'Informe o código do contrato';
     if (!formState.cliente.trim()) nextErrors.cliente = 'Informe o cliente';
     if (!formState.cnpj.trim()) nextErrors.cnpj = 'Informe o CNPJ';
     if (!formState.cicloFaturamento.trim()) nextErrors.cicloFaturamento = 'Informe o ciclo de faturamento';
@@ -239,7 +236,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
     event.preventDefault();
     if (!validate()) return;
 
-    const id = ensureId(formState.codigo);
+    const id = ensureId();
     const months = getReferenceMonths(formState.cicloFaturamento || undefined);
     const periodos = Array.from(new Set([formState.cicloFaturamento, ...months].filter(Boolean))) as string[];
 
@@ -309,7 +306,7 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
 
     const newContract: ContractMock = {
       id,
-      codigo: formState.codigo.trim(),
+      codigo: id,
       cliente: formState.cliente.trim(),
       cnpj: formState.cnpj.trim(),
       segmento: formState.segmento.trim() || 'Não informado',
@@ -387,19 +384,6 @@ export default function CreateContractModal({ open, onClose, onCreate }: CreateC
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
-                  Código do contrato
-                  <input
-                    type="text"
-                    value={formState.codigo}
-                    onChange={handleInputChange('codigo')}
-                    className={`rounded-lg border px-3 py-2 shadow-sm focus:border-yn-orange focus:outline-none focus:ring-2 focus:ring-yn-orange/40 ${
-                      errors.codigo ? 'border-red-400' : 'border-gray-200'
-                    }`}
-                    placeholder="EX: CT-12345"
-                  />
-                  {errors.codigo && <span className="text-xs font-medium text-red-500">{errors.codigo}</span>}
-                </label>
                 <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
                   Cliente
                   <input
