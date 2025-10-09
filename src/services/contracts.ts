@@ -196,40 +196,153 @@ type BaseContractPayload = Omit<
 >;
 
 export type CreateContractPayload = BaseContractPayload & {
-  groupName: string;
-  client_id?: string;
+  groupName?: string | null;
+  client_id?: string | null;
+  contract_code?: string | null;
 };
 
-export async function createContract(payload: CreateContractPayload): Promise<Contract> {
-  const sanitizedPayload: Record<string, unknown> = {
-    ...payload,
-    groupName: payload.groupName.trim() || 'default',
-  };
+function buildCreateContractBody(payload: CreateContractPayload): Record<string, unknown> {
+  const draft: Record<string, unknown> = { ...payload };
 
-  delete sanitizedPayload.contract_code;
-  delete sanitizedPayload.id;
-  delete sanitizedPayload.created_at;
-  delete sanitizedPayload.updated_at;
+  delete draft.contract_code;
+  delete draft.id;
+  delete draft.created_at;
+  delete draft.updated_at;
 
-  const trimmedClientId = payload.client_id?.trim();
-  if (trimmedClientId && isValidUuid(trimmedClientId)) {
-    sanitizedPayload.client_id = trimmedClientId;
+  const rawGroupName =
+    typeof payload.groupName === 'string'
+      ? payload.groupName
+      : payload.groupName != null
+        ? String(payload.groupName)
+        : '';
+  const normalizedGroupName = rawGroupName.trim();
+  draft.groupName = normalizedGroupName || 'default';
+
+  const rawClientId =
+    typeof payload.client_id === 'string'
+      ? payload.client_id.trim()
+      : payload.client_id != null
+        ? String(payload.client_id).trim()
+        : '';
+
+  if (isValidUuid(rawClientId)) {
+    draft.client_id = rawClientId;
   } else {
-    delete sanitizedPayload.client_id;
+    delete draft.client_id;
   }
 
-  const response = await fetch(`${CONTRACTS_API}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(sanitizedPayload),
+  Object.keys(draft).forEach((key) => {
+    if (draft[key] === undefined || draft[key] === null) {
+      delete draft[key];
+    }
   });
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `POST /contracts ${response.status}`);
+  return draft;
+}
+
+type TryParseJsonResult = { ok: true; value: unknown } | { ok: false; error: unknown };
+
+function tryParseJson(text: string): TryParseJsonResult {
+  if (!text) {
+    return { ok: true, value: null };
   }
 
-  return response.json();
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+export async function createContract(payload: CreateContractPayload): Promise<Contract> {
+  const body = buildCreateContractBody(payload);
+  const startedAt = Date.now();
+  const url = CONTRACTS_API;
+
+  console.info('[contracts:POST] Request', { url, payload: body });
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    console.error('[contracts:POST] Network/Unknown error', {
+      url,
+      error,
+      payload: body,
+      tookMs: Date.now() - startedAt,
+    });
+    throw error;
+  }
+
+  const responseText = await response.text().catch(() => '');
+  const tookMs = Date.now() - startedAt;
+
+  if (!response.ok) {
+    console.error('[contracts:POST] Failed', {
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      response: responseText,
+      payload: body,
+      tookMs,
+    });
+
+    const parsedError = responseText ? tryParseJson(responseText) : { ok: true, value: null };
+    let message = `POST ${url} failed with status ${response.status}`;
+    if (parsedError.ok) {
+      const maybeMessage =
+        parsedError.value && typeof parsedError.value === 'object' && 'message' in parsedError.value
+          ? parsedError.value.message
+          : null;
+      if (maybeMessage) {
+        message = String(maybeMessage);
+      } else if (typeof parsedError.value === 'string' && parsedError.value.trim()) {
+        message = parsedError.value;
+      } else if (responseText.trim()) {
+        message = responseText;
+      }
+    } else if (responseText.trim()) {
+      message = responseText;
+    }
+
+    throw new Error(message);
+  }
+
+  const parsedResponse = tryParseJson(responseText);
+  if (!parsedResponse.ok) {
+    console.error('[contracts:POST] Invalid JSON response', {
+      url,
+      response: responseText,
+      error: parsedResponse.error,
+      tookMs,
+    });
+    throw new Error('Resposta inválida da API de contratos.');
+  }
+
+  if (!parsedResponse.value || typeof parsedResponse.value !== 'object') {
+    console.error('[contracts:POST] Unexpected response payload', {
+      url,
+      response: parsedResponse.value,
+      tookMs,
+    });
+    throw new Error('Resposta inesperada da API de contratos.');
+  }
+
+  const contract = parsedResponse.value as Contract;
+
+  console.info('[contracts:POST] Success', {
+    url,
+    status: response.status,
+    tookMs,
+    id: (contract as { id?: unknown })?.id,
+  });
+
+  return contract;
 }
