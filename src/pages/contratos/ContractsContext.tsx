@@ -1,6 +1,7 @@
 import React from 'react';
 import { ContractMock } from '../../mocks/contracts';
 import { mockContracts } from '../../mocks/contracts';
+import { isValidUuid } from '../../utils/uuid';
 
 const DEFAULT_API_URL = 'https://b3767060a437.ngrok-free.app/contracts';
 
@@ -723,16 +724,17 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
   };
 
   const supplier = findDadosValue(['fornecedor', 'supplier']);
-  const groupName = findDadosValue(['grupo', 'group']);
+  const rawGroupName = findDadosValue(['grupo', 'group']);
   const volumeField =
     contract.dadosContrato.find((item) => /volume/i.test(item.label))?.value ?? contract.flex;
   const contractedVolume = parseNumericInput(volumeField);
+  const normalizedGroupName = normalizeString(rawGroupName);
+  const resolvedGroupName = normalizedGroupName || 'default';
+  const rawClientId = normalizeString(contract.id);
 
   const payload: Record<string, unknown> = {
-    contract_code: normalizeString(contract.codigo) || contract.id,
-    client_id: normalizeString(contract.id),
     client_name: normalizeString(contract.cliente),
-    groupName: groupName || undefined,
+    groupName: resolvedGroupName,
     supplier: supplier || undefined,
     cnpj: normalizeString(contract.cnpj),
     segment: normalizeString(contract.segmento),
@@ -758,6 +760,10 @@ const contractToApiPayload = (contract: ContractMock): Record<string, unknown> =
     adjusted: parsePercentInput(contract.flex) ? true : undefined,
     price: parseNumericInput(contract.precoMedio) ?? contract.precoMedio,
   };
+
+  if (rawClientId && isValidUuid(rawClientId)) {
+    payload.client_id = rawClientId;
+  }
 
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined && value !== null && value !== '')

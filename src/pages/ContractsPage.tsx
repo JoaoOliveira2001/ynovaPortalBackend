@@ -3,8 +3,6 @@ import { useContracts } from '../hooks/useContracts';
 import { Contract, createContract } from '../services/contracts';
 
 type FormState = {
-  contract_code: string;
-  client_id: string;
   client_name: string;
   cnpj: string;
   segment: string;
@@ -16,11 +14,10 @@ type FormState = {
   start_date: string;
   end_date: string;
   billing_cycle: string;
+  groupName: string;
 };
 
 const initialFormState: FormState = {
-  contract_code: '',
-  client_id: '',
   client_name: '',
   cnpj: '',
   segment: '',
@@ -32,6 +29,7 @@ const initialFormState: FormState = {
   start_date: '',
   end_date: '',
   billing_cycle: '',
+  groupName: '',
 };
 
 function ensureIsoDate(value: string) {
@@ -174,10 +172,13 @@ export default function ContractsPage() {
     setFormError(null);
     setIsSubmitting(true);
     try {
+      const { groupName, ...rest } = form;
+      const sanitizedGroupName = groupName.trim() || 'default';
       const payload = {
-        ...form,
+        ...rest,
         start_date: ensureIsoDate(form.start_date),
         end_date: ensureIsoDate(form.end_date),
+        groupName: sanitizedGroupName,
       };
       const saved = await createContract(payload);
       setContracts((prev) => [saved, ...prev]);
@@ -198,32 +199,21 @@ export default function ContractsPage() {
         <h2 className="text-lg font-medium">Novo contrato</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <label className="flex flex-col gap-1 text-sm">
-            <span>Código do contrato</span>
-            <input
-              required
-              value={form.contract_code}
-              onChange={handleFormChange('contract_code')}
-              className="border rounded px-2 py-1"
-              placeholder="CTR-2024-..."
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span>Cliente (ID)</span>
-            <input
-              required
-              value={form.client_id}
-              onChange={handleFormChange('client_id')}
-              className="border rounded px-2 py-1"
-              placeholder="UUID"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
             <span>Nome do cliente</span>
             <input
               required
               value={form.client_name}
               onChange={handleFormChange('client_name')}
               className="border rounded px-2 py-1"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span>Grupo</span>
+            <input
+              value={form.groupName}
+              onChange={handleFormChange('groupName')}
+              className="border rounded px-2 py-1"
+              placeholder="default"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">

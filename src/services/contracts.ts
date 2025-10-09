@@ -1,3 +1,5 @@
+import { isValidUuid } from '../utils/uuid';
+
 export type Contract = {
   id: string;
   contract_code: string;
@@ -13,6 +15,7 @@ export type Contract = {
   start_date: string;
   end_date: string;
   billing_cycle: string;
+  groupName?: string;
   upper_limit_percent?: string | number | null;
   lower_limit_percent?: string | number | null;
   flexibility_percent?: string | number | null;
@@ -59,6 +62,7 @@ function normalizeContract(raw: any, index: number): Contract {
     start_date: toString(raw?.start_date),
     end_date: toString(raw?.end_date),
     billing_cycle: toString(raw?.billing_cycle),
+    groupName: raw?.groupName ? toString(raw?.groupName) : undefined,
     upper_limit_percent: raw?.upper_limit_percent ?? null,
     lower_limit_percent: raw?.lower_limit_percent ?? null,
     flexibility_percent: raw?.flexibility_percent ?? null,
@@ -186,15 +190,40 @@ export async function getContracts(signal?: AbortSignal): Promise<Contract[]> {
   return fetchContracts(signal);
 }
 
-export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at'>;
+type BaseContractPayload = Omit<
+  Contract,
+  'id' | 'contract_code' | 'client_id' | 'created_at' | 'updated_at' | 'groupName'
+>;
+
+export type CreateContractPayload = BaseContractPayload & {
+  groupName: string;
+  client_id?: string;
+};
 
 export async function createContract(payload: CreateContractPayload): Promise<Contract> {
+  const sanitizedPayload: Record<string, unknown> = {
+    ...payload,
+    groupName: payload.groupName.trim() || 'default',
+  };
+
+  delete sanitizedPayload.contract_code;
+  delete sanitizedPayload.id;
+  delete sanitizedPayload.created_at;
+  delete sanitizedPayload.updated_at;
+
+  const trimmedClientId = payload.client_id?.trim();
+  if (trimmedClientId && isValidUuid(trimmedClientId)) {
+    sanitizedPayload.client_id = trimmedClientId;
+  } else {
+    delete sanitizedPayload.client_id;
+  }
+
   const response = await fetch(`${CONTRACTS_API}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(sanitizedPayload),
   });
 
   if (!response.ok) {

@@ -99,6 +99,7 @@ export type Contract = {
   start_date: string;
   end_date: string;
   billing_cycle: string;
+  groupName?: string;
   upper_limit_percent: string | number | null;
   lower_limit_percent: string | number | null;
   flexibility_percent: string | number | null;
