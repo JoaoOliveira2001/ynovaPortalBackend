@@ -17,7 +17,7 @@ const ALLOW_ANY_LOGIN = (() => {
 })()
 
 async function bootstrap() {
-  // Enable MSW only during local devv or when VITE_API_MOCK=true 
+  // Enable MSW only during local dev or when VITE_API_MOCK=true 
   const enableMSW = import.meta.env.DEV || import.meta.env.VITE_API_MOCK === 'true' || ALLOW_ANY_LOGIN
   if (enableMSW) {
     const { worker } = await import('./mocks/browser')
