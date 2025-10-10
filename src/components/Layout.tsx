@@ -3,6 +3,7 @@ import { Outlet, NavLink, Link} from 'react-router-dom';
 import {
   Home,
   Calendar,
+  Calculator,
   FileText,
   PieChart,
   User,
@@ -20,6 +21,7 @@ import { mockUser } from '../data/mockData';
 const navigation = [
   { to: '/dashboard', label: 'Dashboard', icon: Home },
   { to: '/contratos', label: 'Contratos', icon: PieChart },
+  { to: '/simulacao', label: 'Simulação', icon: Calculator },
   { to: '/leads', label: 'Balanço Energético', icon: FileText },
   /* { to: '/negociacoes', label: 'Negociações', icon: Handshake }, */
   /* { to: '/agenda', label: 'Agenda', icon: Calendar }, */
