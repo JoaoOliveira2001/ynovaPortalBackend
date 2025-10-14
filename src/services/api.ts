@@ -18,7 +18,7 @@ export async function apiFetch<T>(path: string, options: FetchJsonOptions = {}):
     return mockFetch<T>(path, mockOptions);
   }
 
-  const { headers, ...rest } = options;
+  const { headers, credentials, ...rest } = options;
   const headersWithCsrf = new Headers(headers ?? {});
   const csrf = getCsrfToken();
   if (csrf && !headersWithCsrf.has('X-CSRF-Token')) {
@@ -27,6 +27,7 @@ export async function apiFetch<T>(path: string, options: FetchJsonOptions = {}):
 
   return fetchJson<T>(path, {
     ...rest,
+    credentials: credentials ?? 'include',
     headers: headersWithCsrf,
   });
 }

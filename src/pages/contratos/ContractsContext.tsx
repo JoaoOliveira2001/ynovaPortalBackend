@@ -742,7 +742,9 @@ const buildDeletePayload = (contract: ContractMock): Record<string, unknown> => 
 
 const createContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
   const payload = contractToApiPayload(contract);
-  const response = await post<unknown>(CONTRACTS_ENDPOINT, payload);
+  const response = await post<unknown>(CONTRACTS_ENDPOINT, payload, {
+    credentials: 'include',
+  });
   if (!response) {
     return contract;
   }
@@ -754,7 +756,9 @@ const updateContractInApi = async (contract: ContractMock): Promise<ContractMock
   const payload = contractToApiPayload(contract);
   const id = normalizeString(contract.id);
   const resourcePath = contractResourcePath(id || contract.codigo || contract.cliente);
-  const response = await put<unknown>(resourcePath, payload);
+  const response = await put<unknown>(resourcePath, payload, {
+    credentials: 'include',
+  });
   if (!response) {
     return contract;
   }
@@ -765,13 +769,16 @@ const updateContractInApi = async (contract: ContractMock): Promise<ContractMock
 const deleteContractInApi = async (contract: ContractMock): Promise<void> => {
   const id = normalizeString(contract.id);
   const resourcePath = contractResourcePath(id || contract.codigo || contract.cliente);
-  await del(resourcePath, buildDeletePayload(contract));
+  await del(resourcePath, buildDeletePayload(contract), {
+    credentials: 'include',
+  });
 };
 
 async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
   const data = await get<unknown>(CONTRACTS_ENDPOINT, {
     signal,
     cache: 'no-store',
+    credentials: 'include',
   });
   const contracts = normalizeContractsFromApi(data);
   if (!contracts.length) {

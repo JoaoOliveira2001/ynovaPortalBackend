@@ -123,6 +123,7 @@ export async function fetchContracts(signal?: AbortSignal): Promise<Contract[]> 
   const data = await get<ContractsPayload>('/contracts', {
     signal,
     cache: 'no-store',
+    credentials: 'include',
   });
 
   const normalizedPayload = normalizeContracts(data);
@@ -191,7 +192,9 @@ export async function createContract(payload: CreateContractPayload): Promise<Co
     Object.entries(body).filter(([, value]) => value !== undefined)
   );
 
-  const response = await post<unknown>('/contracts', sanitizedBody);
+  const response = await post<unknown>('/contracts', sanitizedBody, {
+    credentials: 'include',
+  });
 
   return extractCreatedContract(response);
 }
