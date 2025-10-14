@@ -1,5 +1,5 @@
-import { Cliente } from '../types';
-import { mockClientes } from '../data/mockData';
+import type { Cliente } from '../types';
+import { get } from '../lib/apiClient';
 
 type FetchOptions = {
   signal?: AbortSignal;
@@ -11,7 +11,8 @@ export type LeadSimulationResponse = {
   error?: string;
 };
 
-const DEFAULT_BFF_URL = 'https://n8n.ynovamarketplace.com/webhook/mockBalancoEnergetico';
+const LEAD_SIMULATION_PATH = import.meta.env.VITE_LEAD_SIMULATION_PATH || '/lead-simulation';
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 let lastResult: LeadSimulationResponse | null = null;
 let lastRemoteClientes: Cliente[] | null = null;
@@ -247,94 +248,48 @@ function buildErrorMessage(label: string, error: unknown): string {
   return `${label}: erro desconhecido`;
 }
 
-async function parseResponsePayload(response: Response): Promise<any> {
-  const text = await response.text();
-  if (!text.trim()) return null;
-
-  const parsedDirect = tryParseJsonString(text);
-  if (parsedDirect !== null) return parsedDirect;
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
-
 export function getCachedLeadSimulationClientes(): LeadSimulationResponse | null {
   return lastResult;
 }
 
 export async function fetchLeadSimulationClientes({ signal }: FetchOptions = {}): Promise<LeadSimulationResponse> {
-  const endpoint = import.meta.env.VITE_BFF_LEADS_URL || DEFAULT_BFF_URL;
-  const preferredMethod = import.meta.env.VITE_BFF_LEADS_METHOD?.toUpperCase();
+  try {
+    const payload = await get<unknown>(LEAD_SIMULATION_PATH, {
+      signal,
+      cache: 'no-store',
+    });
 
-  const attempts: Array<{ label: string; init: RequestInit }> = [];
-
-  const getAttempt: RequestInit = {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-    cache: 'no-cache',
-  };
-
-  const postAttempt: RequestInit = {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    cache: 'no-cache',
-  };
-
-  if (preferredMethod === 'POST') {
-    attempts.push({ label: 'POST', init: postAttempt });
-    attempts.push({ label: 'GET', init: getAttempt });
-  } else if (preferredMethod === 'GET') {
-    attempts.push({ label: 'GET', init: getAttempt });
-    attempts.push({ label: 'POST', init: postAttempt });
-  } else {
-    attempts.push({ label: 'GET', init: getAttempt }, { label: 'POST', init: postAttempt });
-  }
-
-  const attemptErrors: string[] = [];
-
-  for (const attempt of attempts) {
-    try {
-      const response = await fetch(endpoint, { ...attempt.init, signal });
-      if (!response.ok) {
-        attemptErrors.push(`${attempt.label}: HTTP ${response.status}`);
-        continue;
-      }
-
-      const payload = await parseResponsePayload(response);
-      const rawClientes = extractClientes(payload);
-      if (!Array.isArray(rawClientes) || rawClientes.length === 0) {
-        attemptErrors.push(`${attempt.label}: resposta sem clientes válidos`);
-        continue;
-      }
-
-      const clientes = rawClientes.map((item, index) => normalizeCliente(item, index));
-      const result: LeadSimulationResponse = { clientes, fromCache: false };
-      lastResult = result;
-      lastRemoteClientes = clientes;
-      return result;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw error;
-      }
-      attemptErrors.push(buildErrorMessage(attempt.label, error));
+    const rawClientes = extractClientes(payload);
+    if (!Array.isArray(rawClientes) || rawClientes.length === 0) {
+      throw new Error('Resposta sem clientes válidos');
     }
-  }
 
-  const fallbackClientes = lastRemoteClientes ?? mockClientes;
-  const errorMessage = attemptErrors.length > 0 ? attemptErrors.join(' | ') : 'Não foi possível conectar ao mock BFF';
-  const fallbackResult: LeadSimulationResponse = {
-    clientes: fallbackClientes,
-    fromCache: true,
-    error: errorMessage,
-  };
-  lastResult = fallbackResult;
-  return fallbackResult;
+    const clientes = rawClientes.map((item, index) => normalizeCliente(item, index));
+    const result: LeadSimulationResponse = { clientes, fromCache: false };
+    lastResult = result;
+    lastRemoteClientes = clientes;
+    return result;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+
+    const errorMessage = buildErrorMessage('GET', error);
+    const fallbackClientes = lastRemoteClientes
+      ?? (USE_MOCKS ? (await import('../data/mockData')).mockClientes : null);
+
+    if (fallbackClientes) {
+      const fallbackResult: LeadSimulationResponse = {
+        clientes: fallbackClientes,
+        fromCache: true,
+        error: errorMessage,
+      };
+      lastResult = fallbackResult;
+      return fallbackResult;
+    }
+
+    throw error instanceof Error
+      ? error
+      : new Error('Erro desconhecido ao carregar clientes da simulação');
+  }
 }
