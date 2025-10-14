@@ -61,6 +61,24 @@ export default function LeadsPage() {
     }
   };
 
+  const handleInvoiceRegistered = (leadData: Omit<Lead, 'id'>) => {
+    let createdLead: Lead | null = null;
+    setLeads((prev) => {
+      const nextId = prev.reduce((max, lead) => Math.max(max, lead.id), 0) + 1;
+      createdLead = { ...leadData, id: nextId };
+      return [createdLead, ...prev];
+    });
+
+    setSearchTerm('');
+
+    if (createdLead) {
+      setSelectedLead(createdLead);
+      setActiveTab('faturas');
+    }
+
+    toast.success('Fatura enviada e cadastrada como lead');
+  };
+
   if (!selectedLead) {
     return (
       <>
@@ -223,7 +241,11 @@ export default function LeadsPage() {
             )}
           </div>
         </div>
-      <ModalUploadInvoice isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} />
+      <ModalUploadInvoice
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        onInvoiceRegistered={handleInvoiceRegistered}
+      />
       {isDeleteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white dark:bg-[#3E3E3E] p-6 rounded-lg w-full max-w-sm">
