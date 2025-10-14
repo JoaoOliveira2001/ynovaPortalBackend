@@ -1,4 +1,4 @@
-import { get } from '../lib/apiClient';
+import { get, post } from '../lib/apiClient';
 
 export type Contract = {
   id: string;
@@ -32,12 +32,42 @@ export type Contract = {
   updated_at: string;
 };
 
-type ContractsPayload = Contract[] | { data: Contract[] } | undefined;
+type ContractsPayload =
+  | Contract[]
+  | { data: Contract[] }
+  | { items: Contract[] }
+  | { results: Contract[] }
+  | { contract: Contract }
+  | { result: Contract }
+  | Contract
+  | undefined;
 
 const normalizeContracts = (res: unknown): unknown[] => {
   if (Array.isArray(res)) return res;
-  if (res && typeof res === 'object' && Array.isArray((res as { data?: unknown }).data)) {
-    return (res as { data: unknown[] }).data;
+  if (res && typeof res === 'object') {
+    const record = res as Record<string, unknown>;
+    if (Array.isArray(record.data)) {
+      return record.data as unknown[];
+    }
+    if (Array.isArray(record.items)) {
+      return record.items as unknown[];
+    }
+    if (record.results && Array.isArray(record.results)) {
+      return record.results as unknown[];
+    }
+    if (record.contract && typeof record.contract === 'object') {
+      return [record.contract];
+    }
+    if (record.result && typeof record.result === 'object') {
+      return [record.result];
+    }
+    if (
+      record.id !== undefined ||
+      record.contract_code !== undefined ||
+      record.client_name !== undefined
+    ) {
+      return [res];
+    }
   }
   console.error('[contracts] Unexpected response shape:', res);
   return [];
@@ -101,4 +131,67 @@ export async function fetchContracts(signal?: AbortSignal): Promise<Contract[]> 
 
 export async function getContracts(signal?: AbortSignal): Promise<Contract[]> {
   return fetchContracts(signal);
+}
+
+export type CreateContractPayload = Omit<
+  Contract,
+  'id' | 'created_at' | 'updated_at'
+> & {
+  supplier?: string | null;
+  proinfa_contribution?: string | number | null;
+  spot_price_ref_mwh?: unknown;
+};
+
+const normalizeNullableString = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text === '' ? null : text;
+};
+
+const normalizeProinfaContribution = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const extractCreatedContract = (payload: unknown): Contract => {
+  const candidates = normalizeContracts(payload);
+  if (candidates.length > 0) {
+    return normalizeContract(candidates[0], 0);
+  }
+  if (payload && typeof payload === 'object') {
+    return normalizeContract(payload, 0);
+  }
+  throw new Error('Resposta inválida ao criar contrato.');
+};
+
+export async function createContract(payload: CreateContractPayload): Promise<Contract> {
+  const {
+    spot_price_ref_mwh: _omitSpotPrice,
+    supplier,
+    proinfa_contribution,
+    groupName,
+    ...rest
+  } = payload;
+
+  const body: Record<string, unknown> = {
+    ...rest,
+    supplier: normalizeNullableString(supplier),
+    proinfa_contribution: normalizeProinfaContribution(proinfa_contribution),
+    groupName: normalizeNullableString(groupName) ?? 'default',
+  };
+
+  const sanitizedBody = Object.fromEntries(
+    Object.entries(body).filter(([, value]) => value !== undefined)
+  );
+
+  const response = await post<unknown>('/contracts', sanitizedBody);
+
+  return extractCreatedContract(response);
 }
