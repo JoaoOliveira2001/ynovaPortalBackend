@@ -55,6 +55,7 @@ export async function fetchJson<T>(path: string, options: FetchJsonOptions = {})
     timeoutMs = DEFAULT_TIMEOUT_MS,
     ...rest
   } = options;
+  const { credentials, ...fetchOptions } = rest;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -86,13 +87,20 @@ export async function fetchJson<T>(path: string, options: FetchJsonOptions = {})
       }
     }
 
-    const response = await fetch(buildUrl(path), {
-      ...rest,
-      method,
-      headers,
-      body: finalBody,
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(buildUrl(path), {
+        ...fetchOptions,
+        method,
+        headers,
+        body: finalBody,
+        signal: controller.signal,
+        credentials: credentials ?? 'same-origin',
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`[apiClient] Falha de rede ao acessar ${path}: ${reason}`);
+    }
 
     const text = await response.text();
 
