@@ -6,10 +6,6 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: [
-      'https://657285488d18.ngrok-free.app', // current ngrok tunnel hosts
-      '.ngrok-free.app',
-    ],
     hmr: {
       clientPort: 443,
       protocol: 'wss',
