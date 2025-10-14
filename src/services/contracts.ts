@@ -1,3 +1,5 @@
+import { get } from '../lib/apiClient';
+
 export type Contract = {
   id: string;
   contract_code: string;
@@ -30,17 +32,7 @@ export type Contract = {
   updated_at: string;
 };
 
-const TEN_SECONDS = 10_000;
-const DEFAULT_CONTRACTS_API = 'https://b3767060a437.ngrok-free.app/contracts';
-
-const runtimeEnv: Record<string, string | undefined> =
-  (typeof import.meta !== 'undefined' && (import.meta as unknown as { env?: Record<string, string | undefined> }).env)
-  || (typeof globalThis !== 'undefined' && (globalThis as any)?.process?.env)
-  || {};
-
-const CONTRACTS_API = (
-  runtimeEnv.VITE_CONTRACTS_API || runtimeEnv.REACT_APP_CONTRACTS_API || DEFAULT_CONTRACTS_API
-).replace(/\/$/, '');
+type ContractsPayload = Contract[] | { data: Contract[] } | undefined;
 
 const normalizeContracts = (res: unknown): unknown[] => {
   if (Array.isArray(res)) return res;
@@ -97,147 +89,16 @@ function normalizeContract(raw: any, index: number): Contract {
   };
 }
 
-type ContractsPayload = Contract[] | { data: Contract[] } | undefined;
-
 export async function fetchContracts(signal?: AbortSignal): Promise<Contract[]> {
-  const startedAt = Date.now();
-  const controller = new AbortController();
-  let didTimeout = false;
+  const data = await get<ContractsPayload>('/contracts', {
+    signal,
+    cache: 'no-store',
+  });
 
-  const abortFromCaller = () => {
-    if (!controller.signal.aborted) {
-      controller.abort();
-    }
-  };
-
-  if (signal) {
-    if (signal.aborted) {
-      abortFromCaller();
-    } else {
-      signal.addEventListener('abort', abortFromCaller);
-    }
-  }
-
-  const timeoutId = setTimeout(() => {
-    didTimeout = true;
-    controller.abort();
-  }, TEN_SECONDS);
-
-  try {
-    const response = await fetch(CONTRACTS_API, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'ngrok-skip-browser-warning': 'true',
-      },
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const bodyText = await response.text().catch(() => '<unavailable>');
-      console.error('[contracts] Fetch failed', {
-        url: CONTRACTS_API,
-        status: response.status,
-        statusText: response.statusText,
-        payload: bodyText,
-        tookMs: Date.now() - startedAt,
-        stack: new Error().stack,
-      });
-      throw new Error(`Falha ao carregar contratos (HTTP ${response.status}).`);
-    }
-
-    const text = await response.text();
-    let parsed: ContractsPayload;
-    if (text) {
-      try {
-        parsed = JSON.parse(text) as ContractsPayload;
-      } catch (parseError) {
-        console.error('[contracts] Invalid JSON payload', {
-          url: CONTRACTS_API,
-          payload: text,
-          tookMs: Date.now() - startedAt,
-          error: parseError,
-          stack: parseError instanceof Error ? parseError.stack : undefined,
-        });
-        throw new Error('Resposta inválida da API de contratos.');
-      }
-    }
-
-    const normalizedPayload = normalizeContracts(parsed);
-    return normalizedPayload.map((item, index) => normalizeContract(item, index));
-  } catch (error) {
-    if (controller.signal.aborted && !didTimeout) {
-      throw error;
-    }
-
-    const logPayload = {
-      url: CONTRACTS_API,
-      tookMs: Date.now() - startedAt,
-      timedOut: didTimeout,
-      error,
-      stack: error instanceof Error ? error.stack : undefined,
-    };
-    console.error('[contracts] Network/unknown error', logPayload);
-
-    if (didTimeout) {
-      throw new Error('Tempo limite ao carregar os contratos. Tente novamente mais tarde.');
-    }
-
-    if (error instanceof Error) {
-      throw error;
-    }
-
-    throw new Error('Erro desconhecido ao carregar os contratos.');
-  } finally {
-    clearTimeout(timeoutId);
-    if (signal) {
-      signal.removeEventListener('abort', abortFromCaller);
-    }
-  }
+  const normalizedPayload = normalizeContracts(data);
+  return normalizedPayload.map((item, index) => normalizeContract(item, index));
 }
 
 export async function getContracts(signal?: AbortSignal): Promise<Contract[]> {
   return fetchContracts(signal);
-}
-
-export type CreateContractPayload = Omit<Contract, 'id' | 'created_at' | 'updated_at' | 'client_id'>;
-
-export async function createContract(payload: CreateContractPayload): Promise<Contract> {
-  const supplierValue = typeof payload.supplier === 'string' ? payload.supplier.trim() : payload.supplier ?? null;
-  const proinfaValueRaw = payload.proinfa_contribution;
-  let proinfaValue: number | null;
-  if (proinfaValueRaw === undefined || proinfaValueRaw === null || proinfaValueRaw === '') {
-    proinfaValue = null;
-  } else if (typeof proinfaValueRaw === 'string') {
-    const parsed = Number(proinfaValueRaw.replace(',', '.'));
-    proinfaValue = Number.isNaN(parsed) ? null : parsed;
-  } else {
-    proinfaValue = Number.isFinite(proinfaValueRaw) ? proinfaValueRaw : null;
-  }
-
-  const { spot_price_ref_mwh: _omitSpotPrice, ...restPayload } = payload as CreateContractPayload & {
-    spot_price_ref_mwh?: unknown;
-  };
-
-  const response = await fetch(`${CONTRACTS_API}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      ...restPayload,
-      supplier: supplierValue === '' ? null : supplierValue,
-      proinfa_contribution: proinfaValue,
-      groupName: typeof payload.groupName === 'string' && payload.groupName.trim()
-        ? payload.groupName
-        : 'default',
-    }),
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `POST /contracts ${response.status}`);
-  }
-
-  return response.json();
 }
