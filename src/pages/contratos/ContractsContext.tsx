@@ -1,50 +1,9 @@
 import React from 'react';
-import { ContractMock } from '../../mocks/contracts';
-import { mockContracts } from '../../mocks/contracts';
+import type { ContractMock } from '../../mocks/contracts';
+import { del, get, post, put } from '../../lib/apiClient';
 
-const DEFAULT_API_URL = 'https://b3767060a437.ngrok-free.app/contracts';
-
-const runtimeEnv: Record<string, string | undefined> =
-  ((typeof import.meta !== 'undefined'
-    ? (import.meta as unknown as { env?: Record<string, string | undefined> }).env
-    : undefined) ??
-    ((typeof globalThis !== 'undefined'
-      ? (globalThis as { process?: { env?: Record<string, string | undefined> } })
-      : undefined)?.process?.env) ??
-    {});
-
-const resolveReadApiUrl = () => {
-  const candidates = [
-    runtimeEnv.VITE_CONTRACTS_API_URL,
-    runtimeEnv.VITE_CONTRACTS_API,
-    runtimeEnv.REACT_APP_CONTRACTS_API_URL,
-    runtimeEnv.REACT_APP_CONTRACTS_API,
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeString(candidate);
-    if (normalized) return normalized;
-  }
-
-  return DEFAULT_API_URL;
-};
-
-const resolveWriteApiUrl = () => {
-  const candidates = [
-    runtimeEnv.VITE_CONTRACTS_API_WRITE_URL,
-    runtimeEnv.VITE_CONTRACTS_API_URL,
-    runtimeEnv.VITE_CONTRACTS_API,
-    runtimeEnv.REACT_APP_CONTRACTS_API_URL,
-    runtimeEnv.REACT_APP_CONTRACTS_API,
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeString(candidate);
-    if (normalized) return normalized;
-  }
-
-  return DEFAULT_API_URL;
-};
+const CONTRACTS_ENDPOINT = '/contracts';
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 const resumoKeys: Array<keyof ContractMock['resumoConformidades']> = [
   'Consumo',
@@ -706,28 +665,10 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
   });
 };
 
-const buildEndpointCandidates = (rawUrl: string): string[] => {
-  const normalized = normalizeString(rawUrl) || DEFAULT_API_URL;
-  const sanitized = normalized.replace(/\s/g, '');
-  if (!sanitized) return [DEFAULT_API_URL];
-  const withoutTrailingSlash = sanitized.replace(/\/$/, '');
-  const candidates = new Set<string>();
-  candidates.add(withoutTrailingSlash);
-  if (!/\/contracts(\b|\d|\/)/i.test(withoutTrailingSlash)) {
-    candidates.add(`${withoutTrailingSlash}/contracts`);
-  }
-  return Array.from(candidates);
+const contractResourcePath = (resourceId: string): string => {
+  const sanitized = normalizeString(resourceId).replace(/^\/+/, '');
+  return sanitized ? `${CONTRACTS_ENDPOINT}/${encodeURIComponent(sanitized)}` : CONTRACTS_ENDPOINT;
 };
-
-const buildResourceEndpointCandidates = (rawUrl: string, resourceId: string): string[] => {
-  const sanitizedId = encodeURIComponent(resourceId);
-  return buildEndpointCandidates(rawUrl).map((endpoint) => `${endpoint.replace(/\/$/, '')}/${sanitizedId}`);
-};
-
-const baseHeaders = {
-  Accept: 'application/json',
-  'ngrok-skip-browser-warning': 'true',
-} as const;
 
 const contractToApiPayload = (contract: ContractMock): Record<string, unknown> => {
   const findDadosValue = (keywords: string[]): string | undefined => {
@@ -799,132 +740,44 @@ const buildDeletePayload = (contract: ContractMock): Record<string, unknown> => 
   contact_active: Boolean(normalizeString(contract.contato)),
 });
 
-const requestContractApi = async (
-  endpoints: string[],
-  method: 'POST' | 'PUT' | 'DELETE',
-  payload?: Record<string, unknown>
-): Promise<unknown> => {
-  let lastError: unknown;
-
-  for (const endpoint of endpoints) {
-    try {
-      const response = await fetch(endpoint, {
-        method,
-        headers: {
-          ...baseHeaders,
-          ...(payload ? { 'Content-Type': 'application/json' } : {}),
-        },
-        body: payload ? JSON.stringify(payload) : undefined,
-      });
-
-      if (!response.ok) {
-        const message = await response.text().catch(() => '');
-        throw new Error(message || `${method} ${endpoint} falhou com status ${response.status}`);
-      }
-
-      const text = await response.text().catch(() => '');
-      if (!text) return null;
-      try {
-        return JSON.parse(text);
-      } catch (parseError) {
-        console.error('[ContractsContext] Falha ao interpretar resposta da API.', parseError);
-        return null;
-      }
-    } catch (error) {
-      lastError = error;
-      console.error(`[ContractsContext] Falha ao executar ${method} em ${endpoint}.`, error);
-    }
-  }
-
-  throw (lastError instanceof Error ? lastError : new Error('Falha na requisição da API de contratos.'));
-};
-
 const createContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
   const payload = contractToApiPayload(contract);
-  const endpoints = buildEndpointCandidates(resolveWriteApiUrl());
-  const response = await requestContractApi(endpoints, 'POST', payload);
+  const response = await post<unknown>(CONTRACTS_ENDPOINT, payload);
   if (!response) {
     return contract;
   }
-  const normalized = normalizeContractsFromApi({ contracts: Array.isArray(response) ? response : [response] });
+  const normalized = normalizeContractsFromApi(response);
   return normalized[0] ?? contract;
 };
 
 const updateContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
   const payload = contractToApiPayload(contract);
   const id = normalizeString(contract.id);
-  const baseUrl = resolveWriteApiUrl();
-  const endpoints = id ? buildResourceEndpointCandidates(baseUrl, id) : buildEndpointCandidates(baseUrl);
-  const response = await requestContractApi(endpoints, 'PUT', payload);
+  const resourcePath = contractResourcePath(id || contract.codigo || contract.cliente);
+  const response = await put<unknown>(resourcePath, payload);
   if (!response) {
     return contract;
   }
-  const normalized = normalizeContractsFromApi({ contracts: Array.isArray(response) ? response : [response] });
+  const normalized = normalizeContractsFromApi(response);
   return normalized.find((item) => item.id === contract.id) ?? normalized[0] ?? contract;
 };
 
 const deleteContractInApi = async (contract: ContractMock): Promise<void> => {
   const id = normalizeString(contract.id);
-  const baseUrl = resolveWriteApiUrl();
-  const endpoints = [
-    ...(id ? buildResourceEndpointCandidates(baseUrl, id) : []),
-    ...buildEndpointCandidates(baseUrl),
-  ];
-  await requestContractApi(endpoints, 'DELETE', buildDeletePayload(contract));
+  const resourcePath = contractResourcePath(id || contract.codigo || contract.cliente);
+  await del(resourcePath, buildDeletePayload(contract));
 };
 
 async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
-  const rawUrl = resolveReadApiUrl();
-  const endpoints = buildEndpointCandidates(rawUrl);
-  let lastError: unknown;
-
-  for (const endpoint of endpoints) {
-    try {
-      console.info(`[ContractsContext] Buscando contratos da API em ${endpoint} usando GET.`);
-
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar contratos erro aqui (${response.status})`);
-      }
-
-      const data = await response.json();
-      const contracts = normalizeContractsFromApi(data);
-      if (!contracts.length) {
-        console.warn('[ContractsContext] API retornou lista vazia de contratos.');
-      }
-      console.info(
-        `[ContractsContext] Contratos carregados com sucesso: ${contracts.length} itens recebidos.`
-      );
-      return contracts;
-    } catch (error) {
-      if (signal?.aborted) {
-        throw error;
-      }
-      lastError = error;
-      console.error(
-        `[ContractsContext] Erro ao buscar contratos em ${endpoint}.`,
-        error instanceof Error ? error : new Error(String(error))
-      );
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
-        console.error(
-          '[ContractsContext] Falha de rede ao buscar contratos. Possível problema de CORS ou indisponibilidade da API.'
-        );
-      }
-      console.info('[ContractsContext] Tentando próximo endpoint disponível...');
-    }
+  const data = await get<unknown>(CONTRACTS_ENDPOINT, {
+    signal,
+    cache: 'no-store',
+  });
+  const contracts = normalizeContractsFromApi(data);
+  if (!contracts.length) {
+    console.warn('[ContractsContext] API retornou lista vazia de contratos.');
   }
-
-  throw (lastError instanceof Error
-    ? lastError
-    : new Error('Erro desconhecido ao carregar contratos'));
+  return contracts;
 }
 
 export type ContractUpdater = (contract: ContractMock) => ContractMock;
@@ -974,9 +827,15 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
         setError(null);
       } catch (err) {
         if (signal?.aborted) return;
-        console.error('[ContractsProvider] Falha ao buscar contratos da API, utilizando mocks.', err);
-        setError(err instanceof Error ? err.message : 'Erro desconhecido ao carregar contratos');
-        setContracts(mockContracts.map((contract) => cloneContract(contract)));
+        console.error('[ContractsProvider] Falha ao buscar contratos da API.', err);
+        const message = err instanceof Error ? err.message : 'Erro desconhecido ao carregar contratos';
+        setError(message);
+        if (USE_MOCKS) {
+          const { mockContracts } = await import('../../mocks/contracts');
+          setContracts(mockContracts.map((contract) => cloneContract(contract)));
+        } else {
+          setContracts([]);
+        }
       } finally {
         if (!signal?.aborted) {
           setIsLoading(false);
