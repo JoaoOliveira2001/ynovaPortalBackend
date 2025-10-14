@@ -1,184 +1,190 @@
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 type JsonLike =
   | BodyInit
   | Record<string, unknown>
   | Array<unknown>
   | null
-  | undefined;
+  | undefined
 
-export type FetchJsonOptions = Omit<RequestInit, 'body' | 'method'> & {
-  method?: HttpMethod;
-  body?: JsonLike;
-  timeoutMs?: number;
-};
-
-const DEFAULT_TIMEOUT_MS = 15_000;
-
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL;
-
-if (!rawBaseUrl) {
-  const message =
-    '[apiClient] Variável de ambiente VITE_API_BASE_URL não foi definida. Configure o .env com a URL base da API.';
-  console.error(message);
-  throw new Error(message);
+export type ApiFetchOptions = Omit<RequestInit, 'body'> & {
+  method?: HttpMethod
+  body?: JsonLike
+  timeoutMs?: number
 }
 
-const baseURL = rawBaseUrl.replace(/\/+$/, '');
+const DEFAULT_TIMEOUT_MS = 15_000
+const rawDevFlag = import.meta.env.DEV
+const isDev = rawDevFlag === true || rawDevFlag === 'true'
+const useProxy = (import.meta.env.VITE_USE_PROXY ?? 'true') !== 'false'
+const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim()
+const sanitizedBaseUrl = rawBaseUrl.replace(/\/+$/, '')
+const BASE_URL = isDev && useProxy ? '' : sanitizedBaseUrl
+
+if (!BASE_URL && !(isDev && useProxy)) {
+  const message =
+    '[apiClient] VITE_API_BASE_URL não foi definida. Configure a variável ou habilite o proxy com VITE_USE_PROXY=true.'
+  console.error(message)
+  throw new Error(message)
+}
 
 const buildUrl = (path: string): string => {
   if (/^https?:\/\//i.test(path)) {
-    return path;
+    return path
   }
 
-  const normalizedPath = path.replace(/^\/+/, '');
-  return `${baseURL}/${normalizedPath}`;
-};
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  if (!BASE_URL) {
+    return normalizedPath
+  }
+  return `${BASE_URL}${normalizedPath}`
+}
 
-const isJsonSerializable = (value: JsonLike): value is Record<string, unknown> | Array<unknown> => {
-  if (!value) return false;
-  if (typeof value !== 'object') return false;
-  if (value instanceof FormData) return false;
-  if (value instanceof Blob) return false;
-  if (value instanceof ArrayBuffer) return false;
-  if (ArrayBuffer.isView(value)) return false;
-  if (value instanceof URLSearchParams) return false;
-  return true;
-};
+const shouldSerializeAsJson = (value: JsonLike): value is Record<string, unknown> | Array<unknown> => {
+  if (!value) return false
+  if (typeof value !== 'object') return false
+  if (value instanceof FormData) return false
+  if (value instanceof Blob) return false
+  if (value instanceof ArrayBuffer) return false
+  if (ArrayBuffer.isView(value)) return false
+  if (value instanceof URLSearchParams) return false
+  return true
+}
 
-export async function fetchJson<T>(path: string, options: FetchJsonOptions = {}): Promise<T> {
+export async function apiFetch<T = unknown>(path: string, init: ApiFetchOptions = {}): Promise<T> {
   const {
-    method = 'GET',
+    method: rawMethod = 'GET',
     body,
     headers: headersInit,
     signal,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     ...rest
-  } = options;
-  const { credentials, ...fetchOptions } = rest;
+  } = init
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const { credentials, mode, ...restOptions } = rest
 
-  const abortListener = () => controller.abort();
+  const method = rawMethod.toUpperCase() as HttpMethod
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  const cleanup = () => {
+    clearTimeout(timeoutId)
+    signal?.removeEventListener('abort', abortListener)
+  }
+
+  const abortListener = () => controller.abort()
   if (signal) {
     if (signal.aborted) {
-      clearTimeout(timeoutId);
-      throw new DOMException('The user aborted a request.', 'AbortError');
+      cleanup()
+      throw new DOMException('The user aborted a request.', 'AbortError')
     }
-    signal.addEventListener('abort', abortListener);
+    signal.addEventListener('abort', abortListener)
   }
 
   try {
-    const headers = new Headers(headersInit ?? {});
+    const headers = new Headers(headersInit ?? {})
     if (!headers.has('Accept')) {
-      headers.set('Accept', 'application/json');
+      headers.set('Accept', 'application/json')
     }
 
-    let finalBody: BodyInit | undefined;
-    if (body !== undefined && body !== null) {
-      if (isJsonSerializable(body)) {
-        finalBody = JSON.stringify(body);
+    let finalBody: BodyInit | undefined
+    if (body !== undefined && body !== null && method !== 'GET' && method !== 'HEAD') {
+      if (shouldSerializeAsJson(body)) {
+        finalBody = JSON.stringify(body)
         if (!headers.has('Content-Type')) {
-          headers.set('Content-Type', 'application/json');
+          headers.set('Content-Type', 'application/json')
         }
       } else {
-        finalBody = body as BodyInit;
+        finalBody = body as BodyInit
       }
     }
 
-    let response: Response;
-    try {
-      response = await fetch(buildUrl(path), {
-        ...fetchOptions,
-        method,
-        headers,
-        body: finalBody,
-        signal: controller.signal,
-        credentials: credentials ?? 'same-origin',
-      });
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(`[apiClient] Falha de rede ao acessar ${path}: ${reason}`);
-    }
+    const response = await fetch(buildUrl(path), {
+      ...restOptions,
+      method,
+      headers,
+      body: finalBody,
+      signal: controller.signal,
+      credentials: credentials ?? 'omit',
+      mode: mode ?? 'cors',
+    }).catch((error) => {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(`[apiClient] Falha de rede ao acessar ${path}: ${reason}`)
+    })
 
-    const text = await response.text();
+    const text = await response.text()
 
     if (!response.ok) {
-      const snippet = text ? text.slice(0, 500) : '<empty>';
+      const snippet = text ? text.slice(0, 500) : '<empty>'
       throw new Error(
         `[apiClient] Request to ${path} failed with status ${response.status}. Response body: ${snippet}`
-      );
+      )
     }
 
     if (!text) {
-      return undefined as T;
+      return undefined as T
     }
 
     try {
-      return JSON.parse(text) as T;
+      return JSON.parse(text) as T
     } catch (error) {
-      console.error(`[apiClient] Failed to parse JSON from ${path}`, error, { responseText: text });
-      throw new Error(`[apiClient] Resposta inválida da API para ${path}.`);
+      console.error(`[apiClient] Failed to parse JSON from ${path}`, error, { responseText: text })
+      throw new Error(`[apiClient] Resposta inválida da API para ${path}.`)
     }
   } finally {
-    clearTimeout(timeoutId);
-    if (signal) {
-      signal.removeEventListener('abort', abortListener);
-    }
+    cleanup()
   }
 }
 
-export function get<T>(
-  path: string,
-  options: Omit<FetchJsonOptions, 'method' | 'body'> = {}
-): Promise<T> {
-  return fetchJson<T>(path, { ...options, method: 'GET' });
+export function getJson<T = unknown>(path: string, init: Omit<ApiFetchOptions, 'method' | 'body'> = {}) {
+  return apiFetch<T>(path, { ...init, method: 'GET' })
 }
 
-export function post<T>(
+export function postJson<T = unknown>(
   path: string,
   body?: JsonLike,
-  options: Omit<FetchJsonOptions, 'method' | 'body'> = {}
-): Promise<T> {
-  return fetchJson<T>(path, { ...options, method: 'POST', body });
+  init: Omit<ApiFetchOptions, 'method' | 'body'> = {}
+) {
+  return apiFetch<T>(path, { ...init, method: 'POST', body })
 }
 
-export function put<T>(
+export function putJson<T = unknown>(
   path: string,
   body?: JsonLike,
-  options: Omit<FetchJsonOptions, 'method' | 'body'> = {}
-): Promise<T> {
-  return fetchJson<T>(path, { ...options, method: 'PUT', body });
+  init: Omit<ApiFetchOptions, 'method' | 'body'> = {}
+) {
+  return apiFetch<T>(path, { ...init, method: 'PUT', body })
 }
 
-export function patch<T>(
+export function patchJson<T = unknown>(
   path: string,
   body?: JsonLike,
-  options: Omit<FetchJsonOptions, 'method' | 'body'> = {}
-): Promise<T> {
-  return fetchJson<T>(path, { ...options, method: 'PATCH', body });
+  init: Omit<ApiFetchOptions, 'method' | 'body'> = {}
+) {
+  return apiFetch<T>(path, { ...init, method: 'PATCH', body })
 }
 
-export function del<T>(
+export function deleteJson<T = unknown>(
   path: string,
   body?: JsonLike,
-  options: Omit<FetchJsonOptions, 'method' | 'body'> = {}
-): Promise<T> {
-  return fetchJson<T>(path, { ...options, method: 'DELETE', body });
+  init: Omit<ApiFetchOptions, 'method' | 'body'> = {}
+) {
+  return apiFetch<T>(path, { ...init, method: 'DELETE', body })
 }
-
-export const healthcheck = () => get('/health', { cache: 'no-store' });
 
 export const apiClient = {
-  baseURL,
-  fetchJson,
-  get,
-  post,
-  put,
-  patch,
-  del,
-  healthcheck,
-};
+  baseUrl: BASE_URL,
+  isDev,
+  useProxy,
+  fetch: apiFetch,
+  getJson,
+  postJson,
+  putJson,
+  patchJson,
+  deleteJson,
+}
 
-export default apiClient;
+export const fetchJson = apiFetch
+export type FetchJsonOptions = ApiFetchOptions
+
+export default apiClient

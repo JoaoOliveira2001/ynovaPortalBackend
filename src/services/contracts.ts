@@ -1,84 +1,102 @@
-import { get, post } from '../lib/apiClient';
+import apiClient, {
+  ApiFetchOptions,
+  deleteJson,
+  getJson,
+  patchJson,
+  postJson,
+  putJson,
+} from '../lib/apiClient'
 
 export type Contract = {
-  id: string;
-  contract_code: string;
-  client_name: string;
-  client_id?: string;
-  groupName?: string;
-  cnpj: string;
-  segment: string;
-  contact_responsible: string;
-  contracted_volume_mwh: string | number | null;
-  status: string;
-  energy_source: string;
-  contracted_modality: string;
-  start_date: string;
-  end_date: string;
-  billing_cycle: string;
-  upper_limit_percent?: string | number | null;
-  lower_limit_percent?: string | number | null;
-  flexibility_percent?: string | number | null;
-  average_price_mwh?: string | number | null;
-  supplier?: string | null;
-  proinfa_contribution?: string | number | null;
-  spot_price_ref_mwh?: string | number | null;
-  compliance_consumption?: string | number | null;
-  compliance_nf?: string | number | null;
-  compliance_invoice?: string | number | null;
-  compliance_charges?: string | number | null;
-  compliance_overall?: string | number | null;
-  created_at: string;
-  updated_at: string;
-};
+  id: string
+  contract_code: string
+  client_name: string
+  client_id?: string
+  groupName?: string
+  cnpj: string
+  segment: string
+  contact_responsible: string
+  contracted_volume_mwh: string | number | null
+  status: string
+  energy_source: string
+  contracted_modality: string
+  start_date: string
+  end_date: string
+  billing_cycle: string
+  upper_limit_percent?: string | number | null
+  lower_limit_percent?: string | number | null
+  flexibility_percent?: string | number | null
+  average_price_mwh?: string | number | null
+  supplier?: string | null
+  proinfa_contribution?: string | number | null
+  spot_price_ref_mwh?: string | number | null
+  compliance_consumption?: string | number | null
+  compliance_nf?: string | number | null
+  compliance_invoice?: string | number | null
+  compliance_charges?: string | number | null
+  compliance_overall?: string | number | null
+  created_at: string
+  updated_at: string
+}
 
 type ContractsPayload =
   | Contract[]
   | { data: Contract[] }
   | { items: Contract[] }
   | { results: Contract[] }
+  | { contracts: Contract[] }
   | { contract: Contract }
   | { result: Contract }
   | Contract
-  | undefined;
+  | undefined
+
+const PREFIX = apiClient.isDev && apiClient.useProxy ? '/api' : ''
+
+const withPrefix = (path: string): string => {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return `${PREFIX}${normalized}`
+}
 
 const normalizeContracts = (res: unknown): unknown[] => {
-  if (Array.isArray(res)) return res;
+  if (Array.isArray(res)) return res
   if (res && typeof res === 'object') {
-    const record = res as Record<string, unknown>;
+    const record = res as Record<string, unknown>
     if (Array.isArray(record.data)) {
-      return record.data as unknown[];
+      return record.data as unknown[]
     }
     if (Array.isArray(record.items)) {
-      return record.items as unknown[];
+      return record.items as unknown[]
     }
-    if (record.results && Array.isArray(record.results)) {
-      return record.results as unknown[];
+    if (Array.isArray(record.results)) {
+      return record.results as unknown[]
+    }
+    if (Array.isArray(record.contracts)) {
+      return record.contracts as unknown[]
     }
     if (record.contract && typeof record.contract === 'object') {
-      return [record.contract];
+      return [record.contract]
     }
     if (record.result && typeof record.result === 'object') {
-      return [record.result];
+      return [record.result]
     }
     if (
       record.id !== undefined ||
       record.contract_code !== undefined ||
       record.client_name !== undefined
     ) {
-      return [res];
+      return [res]
     }
   }
-  console.error('[contracts] Unexpected response shape:', res);
-  return [];
-};
+  console.error('[contracts] Unexpected response shape:', res)
+  return []
+}
 
-function normalizeContract(raw: any, index: number): Contract {
-  const idSource = raw?.id ?? raw?.contract_code ?? index;
+const normalizeContract = (raw: any, index: number): Contract => {
+  const idSource = raw?.id ?? raw?.contract_code ?? index
   const toString = (value: unknown, fallback = ''): string => {
-    if (value === null || value === undefined) return fallback;
-    return String(value);
-  };
+    if (value === null || value === undefined) return fallback
+    return String(value)
+  }
 
   return {
     id: toString(idSource, String(index)),
@@ -100,13 +118,14 @@ function normalizeContract(raw: any, index: number): Contract {
     lower_limit_percent: raw?.lower_limit_percent ?? null,
     flexibility_percent: raw?.flexibility_percent ?? null,
     average_price_mwh: raw?.average_price_mwh ?? null,
-    supplier: raw?.supplier != null
-      ? toString(raw?.supplier)
-      : raw?.fornecedor != null
-      ? toString(raw?.fornecedor)
-      : raw?.supplier_name != null
-      ? toString(raw?.supplier_name)
-      : null,
+    supplier:
+      raw?.supplier != null
+        ? toString(raw?.supplier)
+        : raw?.fornecedor != null
+        ? toString(raw?.fornecedor)
+        : raw?.supplier_name != null
+        ? toString(raw?.supplier_name)
+        : null,
     proinfa_contribution: raw?.proinfa_contribution ?? raw?.proinfa ?? null,
     spot_price_ref_mwh: raw?.spot_price_ref_mwh ?? null,
     compliance_consumption: raw?.compliance_consumption ?? null,
@@ -116,85 +135,62 @@ function normalizeContract(raw: any, index: number): Contract {
     compliance_overall: raw?.compliance_overall ?? null,
     created_at: toString(raw?.created_at),
     updated_at: toString(raw?.updated_at),
-  };
+  }
 }
 
-export async function fetchContracts(signal?: AbortSignal): Promise<Contract[]> {
-  const data = await get<ContractsPayload>('/contracts', {
+export async function listContracts(signal?: AbortSignal): Promise<Contract[]> {
+  const data = await getJson<ContractsPayload>(withPrefix('/contracts'), {
     signal,
     cache: 'no-store',
-    credentials: 'include',
-  });
-
-  const normalizedPayload = normalizeContracts(data);
-  return normalizedPayload.map((item, index) => normalizeContract(item, index));
+  })
+  const normalized = normalizeContracts(data)
+  return normalized.map((item, index) => normalizeContract(item, index))
 }
 
-export async function getContracts(signal?: AbortSignal): Promise<Contract[]> {
-  return fetchContracts(signal);
-}
-
-export type CreateContractPayload = Omit<
-  Contract,
-  'id' | 'created_at' | 'updated_at'
-> & {
-  supplier?: string | null;
-  proinfa_contribution?: string | number | null;
-  spot_price_ref_mwh?: unknown;
-};
-
-const normalizeNullableString = (value: unknown): string | null => {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
-  return text === '' ? null : text;
-};
-
-const normalizeProinfaContribution = (value: unknown): number | null => {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value.replace(',', '.'));
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-};
-
-const extractCreatedContract = (payload: unknown): Contract => {
-  const candidates = normalizeContracts(payload);
-  if (candidates.length > 0) {
-    return normalizeContract(candidates[0], 0);
-  }
-  if (payload && typeof payload === 'object') {
-    return normalizeContract(payload, 0);
-  }
-  throw new Error('Resposta inválida ao criar contrato.');
-};
+export type CreateContractPayload = Record<string, unknown>
 
 export async function createContract(payload: CreateContractPayload): Promise<Contract> {
-  const {
-    spot_price_ref_mwh: _omitSpotPrice,
-    supplier,
-    proinfa_contribution,
-    groupName,
-    ...rest
-  } = payload;
+  const response = await postJson<ContractsPayload>(withPrefix('/contracts'), payload)
+  const normalized = normalizeContracts(response)
+  if (normalized[0]) {
+    return normalizeContract(normalized[0], 0)
+  }
+  throw new Error('Resposta inválida ao criar contrato.')
+}
 
-  const body: Record<string, unknown> = {
-    ...rest,
-    supplier: normalizeNullableString(supplier),
-    proinfa_contribution: normalizeProinfaContribution(proinfa_contribution),
-    groupName: normalizeNullableString(groupName) ?? 'default',
-  };
+export type UpdateContractPayload = Record<string, unknown>
 
-  const sanitizedBody = Object.fromEntries(
-    Object.entries(body).filter(([, value]) => value !== undefined)
-  );
+export async function updateContract(
+  idOrPath: string,
+  payload: UpdateContractPayload
+): Promise<Contract> {
+  const path = withPrefix(idOrPath.startsWith('/') ? idOrPath : `/contracts/${idOrPath}`)
+  const response = await putJson<ContractsPayload>(path, payload)
+  const normalized = normalizeContracts(response)
+  if (normalized[0]) {
+    return normalizeContract(normalized[0], 0)
+  }
+  throw new Error('Resposta inválida ao atualizar contrato.')
+}
 
-  const response = await post<unknown>('/contracts', sanitizedBody, {
-    credentials: 'include',
-  });
+export async function patchContract(
+  idOrPath: string,
+  payload: UpdateContractPayload
+): Promise<Contract> {
+  const path = withPrefix(idOrPath.startsWith('/') ? idOrPath : `/contracts/${idOrPath}`)
+  const response = await patchJson<ContractsPayload>(path, payload)
+  const normalized = normalizeContracts(response)
+  if (normalized[0]) {
+    return normalizeContract(normalized[0], 0)
+  }
+  throw new Error('Resposta inválida ao atualizar contrato.')
+}
 
-  return extractCreatedContract(response);
+export async function deleteContract(
+  idOrPath: string,
+  payload?: Record<string, unknown>,
+  init: Omit<ApiFetchOptions, 'method' | 'body'> = {}
+): Promise<void> {
+  const path = withPrefix(idOrPath.startsWith('/') ? idOrPath : `/contracts/${idOrPath}`)
+  await deleteJson(path, payload, init)
 }

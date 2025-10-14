@@ -1,5 +1,5 @@
 import type { Cliente } from '../types';
-import { get } from '../lib/apiClient';
+import { getJson } from '../lib/apiClient';
 
 type FetchOptions = {
   signal?: AbortSignal;
@@ -254,7 +254,7 @@ export function getCachedLeadSimulationClientes(): LeadSimulationResponse | null
 
 export async function fetchLeadSimulationClientes({ signal }: FetchOptions = {}): Promise<LeadSimulationResponse> {
   try {
-    const payload = await get<unknown>(LEAD_SIMULATION_PATH, {
+    const payload = await getJson<unknown>(LEAD_SIMULATION_PATH, {
       signal,
       cache: 'no-store',
     });

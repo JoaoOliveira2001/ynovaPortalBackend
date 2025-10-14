@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
-import { post } from '../lib/apiClient';
+import { postJson } from '../lib/apiClient';
 
 interface SelectedFile {
   name: string;
@@ -62,7 +62,7 @@ export default function UploadXLSX() {
       setStatus('loading');
       setMessage('Enviando fatura...');
 
-      await post(uploadEndpoint, {
+      await postJson(uploadEndpoint, {
         filename: selectedFile.name,
         fileData: selectedFile.base64,
       });

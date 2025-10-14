@@ -1,9 +1,14 @@
 import React from 'react';
 import type { ContractMock } from '../../mocks/contracts';
-import { del, get, post, put } from '../../lib/apiClient';
+import {
+  createContract as createContractService,
+  deleteContract as deleteContractService,
+  listContracts,
+  updateContract as updateContractService,
+} from '../../services/contracts';
 
-const CONTRACTS_ENDPOINT = '/contracts';
-const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+const CONTRACTS_BASE_PATH = '/contracts';
+const shouldUseMocks = () => import.meta.env.VITE_USE_MOCKS === 'true';
 
 const resumoKeys: Array<keyof ContractMock['resumoConformidades']> = [
   'Consumo',
@@ -667,7 +672,9 @@ const normalizeContractsFromApi = (payload: unknown): ContractMock[] => {
 
 const contractResourcePath = (resourceId: string): string => {
   const sanitized = normalizeString(resourceId).replace(/^\/+/, '');
-  return sanitized ? `${CONTRACTS_ENDPOINT}/${encodeURIComponent(sanitized)}` : CONTRACTS_ENDPOINT;
+  return sanitized
+    ? `${CONTRACTS_BASE_PATH}/${encodeURIComponent(sanitized)}`
+    : CONTRACTS_BASE_PATH;
 };
 
 const contractToApiPayload = (contract: ContractMock): Record<string, unknown> => {
@@ -742,13 +749,8 @@ const buildDeletePayload = (contract: ContractMock): Record<string, unknown> => 
 
 const createContractInApi = async (contract: ContractMock): Promise<ContractMock> => {
   const payload = contractToApiPayload(contract);
-  const response = await post<unknown>(CONTRACTS_ENDPOINT, payload, {
-    credentials: 'include',
-  });
-  if (!response) {
-    return contract;
-  }
-  const normalized = normalizeContractsFromApi(response);
+  const created = await createContractService(payload);
+  const normalized = normalizeContractsFromApi(created);
   return normalized[0] ?? contract;
 };
 
@@ -756,30 +758,19 @@ const updateContractInApi = async (contract: ContractMock): Promise<ContractMock
   const payload = contractToApiPayload(contract);
   const id = normalizeString(contract.id);
   const resourcePath = contractResourcePath(id || contract.codigo || contract.cliente);
-  const response = await put<unknown>(resourcePath, payload, {
-    credentials: 'include',
-  });
-  if (!response) {
-    return contract;
-  }
-  const normalized = normalizeContractsFromApi(response);
+  const updated = await updateContractService(resourcePath, payload);
+  const normalized = normalizeContractsFromApi(updated);
   return normalized.find((item) => item.id === contract.id) ?? normalized[0] ?? contract;
 };
 
 const deleteContractInApi = async (contract: ContractMock): Promise<void> => {
   const id = normalizeString(contract.id);
   const resourcePath = contractResourcePath(id || contract.codigo || contract.cliente);
-  await del(resourcePath, buildDeletePayload(contract), {
-    credentials: 'include',
-  });
+  await deleteContractService(resourcePath, buildDeletePayload(contract));
 };
 
 async function fetchContracts(signal?: AbortSignal): Promise<ContractMock[]> {
-  const data = await get<unknown>(CONTRACTS_ENDPOINT, {
-    signal,
-    cache: 'no-store',
-    credentials: 'include',
-  });
+  const data = await listContracts(signal);
   const contracts = normalizeContractsFromApi(data);
   if (!contracts.length) {
     console.warn('[ContractsContext] API retornou lista vazia de contratos.');
@@ -837,7 +828,7 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
         console.error('[ContractsProvider] Falha ao buscar contratos da API.', err);
         const message = err instanceof Error ? err.message : 'Erro desconhecido ao carregar contratos';
         setError(message);
-        if (USE_MOCKS) {
+        if (shouldUseMocks()) {
           const { mockContracts } = await import('../../mocks/contracts');
           setContracts(mockContracts.map((contract) => cloneContract(contract)));
         } else {
