@@ -1,49 +1,38 @@
-﻿/* Simple API client with CSRF support and cookie credentials */
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+import { fetchJson, type FetchJsonOptions, type HttpMethod } from '../lib/apiClient';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const USE_MOCK = (import.meta.env.VITE_API_MOCK || 'false') === 'true';
+/* Simple API client with CSRF support */
+const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 function getCsrfToken() {
-  // Expect a cookie named `csrf_token` set by backend on GET /auth/csrf
   const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  if (USE_MOCK) {
-    // Lazy import mock when enabled
+export async function apiFetch<T>(path: string, options: FetchJsonOptions = {}): Promise<T> {
+  if (USE_MOCKS) {
     const { mockFetch } = await import('./mockApi');
-    return mockFetch<T>(path, options);
+    const mockOptions: RequestInit = { ...options };
+    if (mockOptions.body && typeof mockOptions.body !== 'string') {
+      mockOptions.body = JSON.stringify(mockOptions.body);
+    }
+    return mockFetch<T>(path, mockOptions);
   }
 
-  const headers = new Headers(options.headers || {});
-  if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
+  const { headers, credentials, ...rest } = options;
+  const headersWithCsrf = new Headers(headers ?? {});
   const csrf = getCsrfToken();
-  if (csrf) headers.set('X-CSRF-Token', csrf);
+  if (csrf && !headersWithCsrf.has('X-CSRF-Token')) {
+    headersWithCsrf.set('X-CSRF-Token', csrf);
+  }
 
-  const resp = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-    credentials: 'include',
+  return fetchJson<T>(path, {
+    ...rest,
+    credentials: credentials ?? 'include',
+    headers: headersWithCsrf,
   });
-
-  if (resp.status === 204) return undefined as unknown as T;
-  const text = await resp.text();
-  let data: any;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    throw new Error('Invalid JSON from server');
-  }
-  if (!resp.ok) {
-    const message = data?.message || `HTTP ${resp.status}`;
-    throw new Error(message);
-  }
-  return data as T;
 }
+
+export type { HttpMethod };
 
 // Auth endpoints
 export type AuthUser = {
@@ -60,14 +49,14 @@ export const AuthAPI = {
   login: (email: string, password: string) =>
     apiFetch<AuthUser>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: { email, password },
     }),
   logout: () => apiFetch<void>('/auth/logout', { method: 'POST' }),
   refresh: () => apiFetch<AuthUser>('/auth/refresh', { method: 'POST' }),
   forgotPassword: (email: string) =>
     apiFetch<void>('/auth/forgot-password', {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: { email },
     }),
 };
 
@@ -214,7 +203,7 @@ export type Paged<T> = { items: T[]; total: number; page: number; pageSize: numb
 
 export const ContractsAPI = {
   list: async (q: ContractsQuery = {}) => {
-    const contracts = await apiFetch<Contract[]>(`/contracts`, { method: 'GET' });
+    const contracts = await apiFetch<Contract[]>(`/contracts`, { method: 'GET', cache: 'no-store' });
 
     const searchTerm = (q.search || '').toLowerCase();
     const cnpjFilter = (q.cnpj || '').replace(/[^0-9]/g, '');
