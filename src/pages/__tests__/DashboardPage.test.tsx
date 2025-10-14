@@ -41,6 +41,28 @@ describe('DashboardPage', () => {
   });
 
   it('trocar o mês altera os números dos cards', async () => {
+    server.use(
+      http.get('/api/dashboard/overview', ({ request }) => {
+        const url = new URL(request.url);
+        const month = url.searchParams.get('mes');
+        if (month === '2025-08') {
+          return HttpResponse.json({
+            totalContratosAtivos: 99,
+            distribuicaoConformidade: { Subutilizado: 1, Conforme: 7, Excedente: 1, Indefinido: 0 },
+            totalOportunidades: 5,
+            totalDivergenciasNF: 3,
+            totalDivergenciasFatura: 2,
+          });
+        }
+        return HttpResponse.json({
+          totalContratosAtivos: 18,
+          distribuicaoConformidade: { Subutilizado: 2, Conforme: 5, Excedente: 2, Indefinido: 1 },
+          totalOportunidades: 4,
+          totalDivergenciasNF: 1,
+          totalDivergenciasFatura: 1,
+        });
+      })
+    );
     renderWithProviders(<DashboardPage />);
     const month = await screen.findByLabelText(/Selecionar mês/i);
     // aguarda primeiro valor

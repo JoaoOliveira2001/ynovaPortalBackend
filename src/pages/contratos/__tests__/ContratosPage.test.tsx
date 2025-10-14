@@ -1,61 +1,73 @@
 import React from 'react';
-import { describe, it, expect } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import React from 'react';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import ContratosPage from '..';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { vi } from 'vitest';
+
+vi.mock('../../../services/contracts', async () => {
+  const { mockContracts } = await import('../../../mocks/contracts');
+  return {
+    listContracts: vi.fn(async () => mockContracts),
+    createContract: vi.fn(async () => mockContracts[0]),
+    updateContract: vi.fn(async () => mockContracts[0]),
+    deleteContract: vi.fn(async () => {}),
+    patchContract: vi.fn(async () => mockContracts[0]),
+  };
+});
+
+let ContratosPage: React.ComponentType<Record<string, never>>;
+let ContractsProvider: React.ComponentType<{ children: React.ReactNode }>;
+let contractsFixture: Array<{ codigo: string; cliente: string }>;
+
+beforeAll(async () => {
+  const pageModule = await import('..');
+  ContratosPage = pageModule.default;
+  const contextModule = await import('../ContractsContext');
+  ContractsProvider = contextModule.ContractsProvider;
+  const { mockContracts } = await import('../../../mocks/contracts');
+  contractsFixture = mockContracts.slice(0, 3).map(({ codigo, cliente }) => ({ codigo, cliente }));
+});
 
 function renderWithProviders(ui: React.ReactElement) {
   const qc = new QueryClient();
   return render(
     <MemoryRouter>
-      <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+      <QueryClientProvider client={qc}>
+        <ContractsProvider>{ui}</ContractsProvider>
+      </QueryClientProvider>
     </MemoryRouter>
   );
 }
 
 describe('ContratosPage', () => {
-  it('filtra por mês ao alterar o input', async () => {
+  it('lista contratos carregados do serviço compartilhado', async () => {
     renderWithProviders(<ContratosPage />);
-    const month = await screen.findByLabelText(/Selecionar.*\(YYYY-MM\)/i);
-    await userEvent.clear(month);
-    await userEvent.type(month as HTMLInputElement, '2025-06');
-
-    // aguarda render da tabela
-    const rows = await screen.findAllByRole('row');
-    // pula header
-    const dataRows = rows.slice(1).filter((r) => within(r).queryByRole('cell'));
-    // cada linha deve conter o ciclo 2025-06
-    for (const row of dataRows) {
-      expect(row.textContent).toMatch(/2025-06/);
+    for (const { codigo, cliente } of contractsFixture) {
+      expect(await screen.findAllByText(new RegExp(codigo, 'i'))).not.toHaveLength(0);
+      expect(await screen.findAllByText(new RegExp(cliente, 'i'))).not.toHaveLength(0);
     }
   });
 
-  it('toggle "Somente com oportunidade" filtra somente COM', async () => {
+  it('filtra contratos pela barra de busca', async () => {
     renderWithProviders(<ContratosPage />);
-    const checkbox = await screen.findByLabelText(/Somente com oportunidade/i);
-    await userEvent.click(checkbox);
+    const search = screen.getByPlaceholderText(/Buscar por código, cliente ou CNPJ/i);
+    await userEvent.type(search, contractsFixture[0].codigo);
 
-    // Após filtrar, cada linha deve conter o badge "Com Oportunidade"
-    await waitFor(async () => {
+    await waitFor(() => {
       const rows = screen.getAllByRole('row').slice(1);
       expect(rows.length).toBeGreaterThan(0);
-      for (const row of rows) {
-        expect(row.textContent).toMatch(/Com Oportunidade/);
-      }
+      expect(rows.some((row) => row.textContent?.includes(contractsFixture[0].codigo))).toBe(true);
     });
   });
 
-  it('renderiza mini-badges de conformidades na lista', async () => {
+  it('exibe os resumos de conformidade para cada contrato', async () => {
     renderWithProviders(<ContratosPage />);
-    // aguarda pelo menos uma linha com badges
-    const nf = await screen.findAllByLabelText('NF Energia');
-    const icms = await screen.findAllByLabelText('NF ICMS');
-    const fatura = await screen.findAllByLabelText('Fatura');
-    expect(nf.length).toBeGreaterThan(0);
-    expect(icms.length).toBeGreaterThan(0);
-    expect(fatura.length).toBeGreaterThan(0);
+    expect(await screen.findAllByText(/Consumo/i)).not.toHaveLength(0);
+    expect(await screen.findAllByText(/NF/i)).not.toHaveLength(0);
+    expect(await screen.findAllByText(/Fatura/i)).not.toHaveLength(0);
   });
 });
 

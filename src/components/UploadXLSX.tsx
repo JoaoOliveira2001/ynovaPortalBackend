@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
+import { postJson } from '../lib/apiClient';
 
 interface SelectedFile {
   name: string;
@@ -25,6 +26,9 @@ export default function UploadXLSX() {
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [message, setMessage] = useState<string>('');
+
+  const uploadEndpoint =
+    import.meta.env.VITE_UPLOAD_INVOICE_PATH || '/webhook-test/8d7b84b3-f20d-4374-a812-76db38ebc77d';
 
   const openFilePicker = () => {
     fileInputRef.current?.click();
@@ -58,24 +62,10 @@ export default function UploadXLSX() {
       setStatus('loading');
       setMessage('Enviando fatura...');
 
-      const response = await fetch('https://n8n.ynovamarketplace.com/webhook-test/8d7b84b3-f20d-4374-a812-76db38ebc77d', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: selectedFile.name,
-          fileData: selectedFile.base64,
-        }),
+      await postJson(uploadEndpoint, {
+        filename: selectedFile.name,
+        fileData: selectedFile.base64,
       });
-
-      if (!response.ok) {
-        let serverMessage = '';
-        try {
-          serverMessage = await response.text();
-        } catch {}
-        throw new Error(serverMessage || 'Falha ao enviar');
-      }
 
       setStatus('success');
       setMessage(`✅  enviada com sucesso: ${selectedFile.name}`);

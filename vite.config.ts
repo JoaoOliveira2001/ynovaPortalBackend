@@ -6,17 +6,16 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    allowedHosts: [
-      'https://657285488d18.ngrok-free.app', // current ngrok tunnel hosts
-      '.ngrok-free.app',
-    ],
     hmr: {
       clientPort: 443,
       protocol: 'wss',
     },
+    proxy: {
+      '/api': {
+        target: 'http://ec2-18-116-166-24.us-east-2.compute.amazonaws.com:4000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
   },
-  test: {
-    environment: 'jsdom',
-    setupFiles: 'src/test/setup.ts',
-  }
 })
